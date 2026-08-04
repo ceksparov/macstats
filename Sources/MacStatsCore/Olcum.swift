@@ -10,6 +10,13 @@ import Foundation
 
 /// Apple'ın kendi termal değerlendirmesi.
 ///
+/// Bu bir sıcaklık DEĞİL, bir karar: macOS'un "makine ısı yüzünden kendini
+/// kısmak zorunda mı" sorusuna verdiği cevap.
+///   normal — hiçbir kısıtlama yok
+///   orta   — fanlar hızlandı / hafif kısma başladı (fansız modelde sessiz kısma)
+///   ciddi  — sistem işlemciyi belirgin şekilde yavaşlatıyor
+///   kritik — acil durum, ancak temel işler yürüyor
+///
 /// Bu RESMÎ, belgelenmiş bir API. Sıcaklık sensörleri bir gün bozulsa bile
 /// bu çalışmaya devam eder — o yüzden yedek/tamamlayıcı gösterge olarak
 /// bilerek yanına koyuyoruz.
@@ -39,6 +46,7 @@ public struct Ölçüm: Sendable {
     public let sıcaklıklar: Sıcaklıklar?
     public let işlemci: İşlemciYükü?
     public let bellek: BellekDurumu?
+    public let pil: PilDurumu?
     public let termal: TermalDurum
     public let an: Date
 }
@@ -51,6 +59,7 @@ public final class ÖlçümToplayıcı {
     private let sıcaklıkOkuyucu = SıcaklıkOkuyucu()
     private let işlemciOkuyucu = İşlemciOkuyucu()
     private let bellekOkuyucu = BellekOkuyucu()
+    private let pilOkuyucu = PilOkuyucu()
 
     public init() {}
 
@@ -59,6 +68,7 @@ public final class ÖlçümToplayıcı {
             sıcaklıklar: sıcaklıkOkuyucu.oku(),
             işlemci: işlemciOkuyucu.oku(),
             bellek: bellekOkuyucu.oku(),
+            pil: pilOkuyucu.oku(),
             termal: TermalDurum.sistemden(),
             an: Date()
         )

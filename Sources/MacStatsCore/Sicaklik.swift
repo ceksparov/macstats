@@ -77,6 +77,48 @@ public struct SensörOkuması: Sendable {
     public let derece: Double
 }
 
+
+/// Bir sensörün hangi bileşene ait olduğu.
+public enum SensörGrubu: Sendable {
+    case işlemciÇekirdeği
+    case çipGövdesi
+    case grafik
+    case pil
+    case depolama
+}
+
+/// Sensör adına bakarak hangi bileşene ait olduğunu tahmin eder.
+///
+/// BAŞKA MAC MODELLERİ İÇİN EN ÖNEMLİ YER BURASI. Sensör isimleri Apple'ın
+/// belgelemediği, çipe göre değişen isimler. Bu M1 Air'de çekirdekler
+/// "pACC"/"eACC" diye adlandırılmış; başka bir çipte farklı olabilir.
+/// O yüzden:
+///   - eşleşme tam isimle değil önekle yapılıyor (sensör numaraları değişiyor),
+///   - birden fazla bilinen adlandırma birden deneniyor,
+///   - hiçbiri tutmazsa çip gövdesi sensörleri işlemci yerine kullanılıyor
+///     (bkz. Sıcaklıklar.işlemci) — kabaca doğru bir sayı, hiç sayı olmamasından iyi.
+///
+/// Tanımadığımız bir sensör nil döner ve hiçbir yerde kullanılmaz.
+public func sensörGrubu(_ isim: String) -> SensörGrubu? {
+    // Apple Silicon çekirdek sensörleri: p = performans, e = verimlilik.
+    if isim.hasPrefix("pACC") || isim.hasPrefix("eACC") { return .işlemciÇekirdeği }
+    // Bazı modellerde çekirdek sensörleri doğrudan "CPU" diye geçiyor.
+    if isim.hasPrefix("CPU") { return .işlemciÇekirdeği }
+
+    if isim.hasPrefix("GPU") { return .grafik }
+    if isim.hasPrefix("SOC MTR") || isim.hasPrefix("PMGR SOC") { return .çipGövdesi }
+    // "PMU tdie" güç biriminin ölçtüğü çip sıcaklığı; çekirdek sensörü
+    // bulunamayan modellerde tek dayanağımız bu olabilir.
+    if isim.hasPrefix("PMU tdie") || isim.hasPrefix("PMU2 tdie") { return .çipGövdesi }
+
+    if isim.contains("battery") { return .pil }
+    if isim.hasPrefix("NAND") || isim.hasPrefix("SSD") { return .depolama }
+
+    // Tanımadıklarımız: kalibrasyon referansları (PMU tcal), bağlı olmayan
+    // soketler (PMU tdev), ekran/kamera sensörleri...
+    return nil
+}
+
 /// Bir ölçüm anındaki bütün sıcaklıklar, işe yarar şekilde gruplanmış hâlde.
 /// Alanların nil olabilmesi bilinçli: sensör yoksa sıfır değil "bilinmiyor"
 /// göstermek istiyoruz.
@@ -87,6 +129,11 @@ public struct Sıcaklıklar: Sendable {
     public let çipGövdesi: Double?          // SOC / PMGR
     public let pil: Double?
     public let depolama: Double?            // NAND (SSD)
+
+    /// Grup olarak "işlemci çekirdeği" diye tanınan bütün sensörlerin en
+    /// yükseği. hızlıÇekirdekler/verimliÇekirdekler bu Mac'in adlandırmasına
+    /// özel; bu alan model bağımsız çalışır.
+    public let çekirdekler: Double?
 
     /// Tanı amaçlı ham liste. Menü barda kullanılmıyor, sensör isimleri
     /// başka bir modelde değişirse buraya bakacağız.
@@ -103,8 +150,12 @@ public struct Sıcaklıklar: Sendable {
     /// tcal" gibi sensörler sıcaklık değil kalibrasyon referansı taşıyor ve
     /// sabit 51.9 °C veriyor. Hepsini karıştırsak makine buz gibiyken de
     /// yanarken de aynı sayıyı gösterirdik.
+    /// Başka Mac modellerinde çekirdek sensörü hiç bulunamayabilir; o durumda
+    /// çip gövdesi sıcaklığına düşüyoruz. Birebir aynı şey değil ama birkaç
+    /// derece yakınında ve "hiç sayı yok"tan iyi.
     public var işlemci: Double? {
-        [hızlıÇekirdekler, verimliÇekirdekler].compactMap { $0 }.max()
+        [hızlıÇekirdekler, verimliÇekirdekler, çekirdekler]
+            .compactMap { $0 }.max() ?? çipGövdesi
     }
 }
 
@@ -113,14 +164,6 @@ public struct Sıcaklıklar: Sendable {
 
 public final class SıcaklıkOkuyucu {
 
-    /// Uygulamanın ekranda gösterdiği sensör grupları. Bu Mac'te 57 sıcaklık
-    /// sensörü var ama hepsini her saniye okumak ölçülerek 55 ms sürüyor —
-    /// pencerenin açılmasını geciktirecek kadar uzun. Sadece işe yarayanları
-    /// okuyunca bu süre büyük ölçüde düşüyor.
-    public static let varsayılanÖnekler = [
-        "pACC", "eACC", "GPU", "SOC MTR", "PMGR SOC", "gas gauge battery", "NAND",
-    ]
-
     /// Sisteme açtığımız sensör bağlantısı. Her ölçümde yeniden açmak pahalı
     /// olurdu, o yüzden bir kere açıp saklıyoruz.
     private var istemci: AnyObject?
@@ -128,15 +171,16 @@ public final class SıcaklıkOkuyucu {
     /// Bağlantı bir kere kurulamadıysa her saniye tekrar denemenin anlamı yok.
     private var kurulumBaşarısız = false
 
-    /// nil ise bütün sensörler okunur (tanı aracı bunu kullanıyor).
-    private let önekler: [String]?
+    /// true ise hiçbir eleme yapılmaz, bütün sensörler okunur (tanı aracı).
+    private let hepsiniOku: Bool
 
-    /// İlk okumada seçilip saklanan sensörler. İsimleri de burada duruyor:
-    /// sensörün adını her ölçümde yeniden sormak boşuna iş, isimler değişmiyor.
-    private var seçilmişSensörler: [(servis: AnyObject, isim: String)]?
+    /// İlk okumada keşfedilip saklanan sensörler, hangi gruba ait olduklarıyla
+    /// birlikte. İsimleri de burada duruyor: sensörün adını her ölçümde
+    /// yeniden sormak boşuna iş, isimler çalışma boyunca değişmiyor.
+    private var seçilmişSensörler: [(servis: AnyObject, isim: String, grup: SensörGrubu?)]?
 
-    public init(önekler: [String]? = SıcaklıkOkuyucu.varsayılanÖnekler) {
-        self.önekler = önekler
+    public init(hepsiniOku: Bool = false) {
+        self.hepsiniOku = hepsiniOku
     }
 
     /// Uykudan uyanma sonrası çağrılmalı: uyku boyunca bağlantı ölmüş olabilir
@@ -175,17 +219,18 @@ public final class SıcaklıkOkuyucu {
         return Sıcaklıklar(
             hızlıÇekirdekler:   enYüksek(okumalar, öneki: "pACC"),
             verimliÇekirdekler: enYüksek(okumalar, öneki: "eACC"),
-            grafik:             enYüksek(okumalar, öneki: "GPU"),
-            çipGövdesi:         enYüksek(okumalar, önekleri: ["SOC MTR", "PMGR SOC"]),
-            pil:                enYüksek(okumalar, öneki: "gas gauge battery"),
-            depolama:           enYüksek(okumalar, öneki: "NAND"),
+            grafik:             enYüksek(okumalar, grubu: .grafik),
+            çipGövdesi:         enYüksek(okumalar, grubu: .çipGövdesi),
+            pil:                enYüksek(okumalar, grubu: .pil),
+            depolama:           enYüksek(okumalar, grubu: .depolama),
+            çekirdekler:        enYüksek(okumalar, grubu: .işlemciÇekirdeği),
             hamOkumalar:        okumalar
         )
     }
 
     /// İlgilendiğimiz sensörleri verir. Liste ilk çağrıda bir kez kurulur,
     /// sonraki ölçümler doğrudan onu kullanır.
-    private func sensörleriGetir() -> [(servis: AnyObject, isim: String)]? {
+    private func sensörleriGetir() -> [(servis: AnyObject, isim: String, grup: SensörGrubu?)]? {
         if let seçilmişSensörler { return seçilmişSensörler }
         guard !kurulumBaşarısız, let özellikOku else { return nil }
 
@@ -212,12 +257,15 @@ public final class SıcaklıkOkuyucu {
 
         // İsimleri burada, bir kereye mahsus okuyoruz. Sensör adları çalışma
         // boyunca değişmiyor; her ölçümde yeniden sormak boşa giden süreydi.
-        var seçilmiş: [(servis: AnyObject, isim: String)] = []
+        var seçilmiş: [(servis: AnyObject, isim: String, grup: SensörGrubu?)] = []
         for servis in hepsi {
             let isim = (özellikOku(servis, "Product" as CFString)?
                 .takeRetainedValue() as? String) ?? "(isimsiz)"
-            if let önekler, !önekler.contains(where: { isim.hasPrefix($0) }) { continue }
-            seçilmiş.append((servis, isim))
+            let grup = sensörGrubu(isim)
+            // Tanımadığımız sensörleri her ölçümde okumanın anlamı yok; bu
+            // makinede 57 sensörün hepsini okumak 55 ms, tanıdıklar 3.7 ms.
+            if !hepsiniOku && grup == nil { continue }
+            seçilmiş.append((servis, isim, grup))
         }
 
         guard !seçilmiş.isEmpty else { return nil }
@@ -239,6 +287,14 @@ func enYüksek(_ okumalar: [SensörOkuması], öneki: String) -> Double? {
 func enYüksek(_ okumalar: [SensörOkuması], önekleri: [String]) -> Double? {
     okumalar
         .filter { okuma in önekleri.contains { okuma.isim.hasPrefix($0) } }
+        .map(\.derece)
+        .max()
+}
+
+/// Bir gruba ait sensörlerin en yükseğini bulur.
+public func enYüksek(_ okumalar: [SensörOkuması], grubu: SensörGrubu) -> Double? {
+    okumalar
+        .filter { sensörGrubu($0.isim) == grubu }
         .map(\.derece)
         .max()
 }

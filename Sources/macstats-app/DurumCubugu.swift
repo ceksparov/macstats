@@ -6,37 +6,46 @@ import MacStatsCore
 // ============================================================================
 // MENÜ BARINDAKİ GÖSTERGE
 //
-// Neden SwiftUI'ın hazır MenuBarExtra bileşenini değil de AppKit kullanıyoruz:
-// menü barındaki yazının fontuna karşı tam denetim gerekiyor. Normal fontta
-// rakamlar farklı genişlikte olduğu için "39°" ile "41°" farklı yer kaplıyor
-// ve sayı her değiştiğinde yanındaki bütün menü bar ikonları kayıyor. Göz
-// bunu titreme olarak görüyor ve sinir bozucu oluyor.
+// Neden NSMenu, neden NSPopover değil:
 //
-// Çözüm: her rakamın eşit genişlikte olduğu font (monospacedDigit). AppKit'te
-// bu tek satır; SwiftUI tarafında menü bar etiketine bunu dayatmak güvenilir
-// değil. Pencerenin İÇİ yine SwiftUI — orada böyle bir kısıt yok.
+// Önce NSPopover kullanıyorduk ve iki sorun çıktı. Birincisi hız — popover
+// gerçek bir pencere: uygulamanın öne gelmesi, pencerenin yaratılması ve
+// içeriğin çizilmesi gerekiyor. NSMenu'yü ise işletim sisteminin menü sistemi
+// çiziyor, uygulamanın öne gelmesine bile gerek yok. İkincisi de şuydu:
+// menü barındaki simgeye tekrar tıklayınca pencere kapanmıyordu. Sebebi
+// AppKit'in popover'ı önce kendi kapatması, hemen ardından bizim tıklama
+// işleyicimizin "kapalıymış, açayım" deyip yeniden açmasıydı.
+//
+// NSMenu bu işlerin hepsini kendisi hallediyor: açma, kapama, tekrar tıklayınca
+// kapanma, dışarı tıklayınca kapanma, Esc. Elle yazdığımız her şey (dış tıklama
+// gözcüsü, koşulsuz kapatma, uygulamayı öne alma) gereksizleşti ve silindi.
+//
+// SwiftUI'dan vazgeçmedik: menünün ilk satırı, içine SwiftUI görünümü konmuş
+// tek bir NSMenuItem. Yani düzen hâlâ SwiftUI, açılma hızı AppKit'in.
+//
+// Menü barındaki YAZI için hâlâ elle kurulmuş bir metin kullanıyoruz:
+// rakamların eşit genişlikte olması gerekiyor, yoksa sayı her değiştiğinde
+// yanındaki bütün menü bar simgeleri kayıyor ve göz bunu titreme olarak görüyor.
 // ============================================================================
 
 @MainActor
-final class DurumÇubuğu: NSObject, NSPopoverDelegate {
+final class DurumÇubuğu: NSObject, NSMenuDelegate {
 
     private let durumÖğesi = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let pencere = NSPopover()
+    private let menü = NSMenu()
     private let depo = ÖlçümDeposu()
     private var abonelik: AnyCancellable?
 
-    /// Pencere açıkken, uygulamanın DIŞINDAKİ tıklamaları dinleyen gözcü.
-    /// Neden gerekli: NSPopover'ın "transient" davranışı sadece aynı
-    /// uygulamanın içindeki tıklamalarda kapanmayı sağlıyor. Bizim
-    /// uygulamanın başka penceresi olmadığı için o kural hiç devreye
-    /// girmiyordu ve pencere ekranda takılı kalıyordu.
-    private var dışTıklamaGözcüsü: Any?
+    /// Menünün üst kısmındaki SwiftUI paneli. Depoyu kendisi izlediği için
+    /// menü açıkken kendini yeniliyor.
+    private var panel: NSHostingView<PopupGörünümü>?
+
+    private var girişteBaşlatÖğesi: NSMenuItem?
 
     override init() {
         super.init()
-
-        pencereyiKur()
         düğmeyiKur()
+        menüyüKur()
 
         // Her yeni ölçümde menü barındaki yazıyı tazele.
         abonelik = depo.$ölçüm.sink { [weak self] ölçüm in
@@ -49,22 +58,40 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
         düğme.image = NSImage(systemSymbolName: "thermometer.medium",
                               accessibilityDescription: "İşlemci sıcaklığı")
         düğme.imagePosition = .imageLeading
-        düğme.target = self
-        düğme.action = #selector(düğmeyeTıklandı)
     }
 
-    private func pencereyiKur() {
-        pencere.behavior = .transient  // dışarı tıklayınca kapansın
-        pencere.animates = false       // menü barında animasyon gecikmiş hissettiriyor
-        pencere.delegate = self
-        pencere.contentViewController = NSHostingController(
-            rootView: PopupGörünümü(depo: depo)
-        )
+    private func menüyüKur() {
+        menü.delegate = self
 
-        // SwiftUI görünümünün İLK çizimi pahalı. Uygulama açılırken bir kere
-        // yükleyip bu bedeli baştan ödüyoruz; yoksa ilk tıklamada pencere
-        // gözle görülür şekilde geç geliyor.
-        _ = pencere.contentViewController?.view
+        // Üst kısım: bütün göstergeleri içeren tek bir SwiftUI görünümü.
+        let panelÖğesi = NSMenuItem()
+        let görünüm = NSHostingView(rootView: PopupGörünümü(depo: depo))
+        // Menü içindeki görünümler kendi boylarını kendileri ayarlayamıyor;
+        // ölçüyü SwiftUI'a sorup elle veriyoruz.
+        görünüm.frame = NSRect(origin: .zero, size: görünüm.fittingSize)
+        panelÖğesi.view = görünüm
+        panel = görünüm
+        menü.addItem(panelÖğesi)
+
+        menü.addItem(.separator())
+
+        // AYARLAR — ayrı bir pencereye gerek yok, menünün kendisi yeterli.
+        let giriş = NSMenuItem(
+            title: "Girişte başlat", action: #selector(girişteBaşlatDeğiştir), keyEquivalent: ""
+        )
+        giriş.target = self
+        menü.addItem(giriş)
+        girişteBaşlatÖğesi = giriş
+
+        menü.addItem(.separator())
+
+        menü.addItem(NSMenuItem(
+            title: "Çık", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"
+        ))
+
+        // Menüyü doğrudan durum öğesine bağlıyoruz: tıklama, tekrar tıklama,
+        // dışarı tıklama ve Esc davranışlarını AppKit üstleniyor.
+        durumÖğesi.menu = menü
     }
 
     /// Menü barındaki yazıyı günceller.
@@ -72,13 +99,11 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
         guard let düğme = durumÖğesi.button else { return }
 
         let derece = ölçüm?.sıcaklıklar?.işlemci
-        let metin = " " + kısaSıcaklık(derece)
-
         düğme.attributedTitle = NSAttributedString(
-            string: metin,
+            string: " " + kısaSıcaklık(derece),
             attributes: [
-                // Asıl mesele bu: eşit genişlikte rakamlar. Bu satır olmadan
-                // sayı her değiştiğinde menü barı oynuyor.
+                // Eşit genişlikte rakamlar. Bu satır olmadan sayı her
+                // değiştiğinde menü barı oynuyor.
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular),
                 .foregroundColor: renk(sıcaklıkSeviyesi(derece)),
             ]
@@ -86,7 +111,7 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
     }
 
     /// Sıcaklık seviyesine göre renk. Serin durumda özellikle nötr renk
-    /// kullanıyoruz ki menü barındaki diğer ikonlarla uyumlu dursun ve
+    /// kullanıyoruz ki menü barındaki diğer simgelerle uyumlu dursun ve
     /// gereksiz yere dikkat çekmesin — asıl uyarı rengi işe yarasın.
     private func renk(_ seviye: SıcaklıkSeviyesi) -> NSColor {
         switch seviye {
@@ -96,69 +121,27 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
         }
     }
 
-    @objc private func düğmeyeTıklandı() {
-        if pencere.isShown { kapat() } else { aç() }
+    @objc private func girişteBaşlatDeğiştir() {
+        GirişteBaşlat.ayarla(!GirişteBaşlat.açık)
+        // Onay işaretini istediğimize değil GERÇEKLEŞENE göre koyuyoruz:
+        // kayıt başarısız olabilir (örneğin .app paketi dışından çalışırken).
+        girişteBaşlatÖğesi?.state = GirişteBaşlat.açık ? .on : .off
     }
 
-    private func aç() {
-        guard let düğme = durumÖğesi.button, !pencere.isShown else { return }
+    // MARK: - NSMenuDelegate
 
-        // Bu satır şart: NSPopover, uygulaması etkin değilken görünmüyor.
-        // Bir ara "odak çalmasın" diye kaldırmıştım; ölçtüğümüzde uygulama
-        // arka plandayken pencerenin hiç açılmadığı ortaya çıktı. Takılma
-        // sorununu çözen şey bu satır değil, aşağıdaki dış tıklama gözcüsü.
-        NSApp.activate(ignoringOtherApps: true)
-
-        pencere.show(relativeTo: düğme.bounds, of: düğme, preferredEdge: .minY)
-        pencere.contentViewController?.view.window?.makeKey()
-
-        düğme.highlight(true)  // menü barındaki öğe basılı görünsün
-        gözcüyüBaşlat()
-    }
-
-    private func kapat() {
-        gözcüyüDurdur()
-        durumÖğesi.button?.highlight(false)
-
-        // performClose değil close: performClose bir kapatma "isteği" ve
-        // reddedilebiliyor. Hızlı arka arkaya tıklamada istek yarıda kalıp
-        // pencereyi ekranda bırakıyordu. close koşulsuz kapatır.
-        pencere.close()
-    }
-
-    private func gözcüyüBaşlat() {
-        gözcüyüDurdur()
-        // Sadece fare tıklamalarını dinliyoruz. Bunun için macOS'tan ek izin
-        // gerekmiyor; klavye dinlemek isteseydik erişilebilirlik izni şart olurdu
-        // ve bu uygulamanın böyle bir izne ihtiyacı olmamalı.
-        dışTıklamaGözcüsü = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.kapat()
-            }
-        }
-    }
-
-    private func gözcüyüDurdur() {
-        if let dışTıklamaGözcüsü {
-            NSEvent.removeMonitor(dışTıklamaGözcüsü)
-        }
-        dışTıklamaGözcüsü = nil
-    }
-
-    // MARK: - NSPopoverDelegate
-    // Pencere açıkken daha sık ölçüyoruz, kapanınca geri seyreltiyoruz.
-
-    func popoverDidShow(_ notification: Notification) {
+    func menuWillOpen(_ menu: NSMenu) {
+        girişteBaşlatÖğesi?.state = GirişteBaşlat.açık ? .on : .off
         depo.pencereDurumuDeğişti(açık: true)
+
+        // İçeriğin boyu değişmiş olabilir (grafik "veri toplanıyor" yazısından
+        // gerçek çizime geçince). Menü açılmadan hemen önce ölçüyü tazeliyoruz.
+        if let panel {
+            panel.frame = NSRect(origin: .zero, size: panel.fittingSize)
+        }
     }
 
-    func popoverDidClose(_ notification: Notification) {
-        // Pencere bizim kapat() dışında bir yoldan da kapanmış olabilir
-        // (Esc, sistem). Gözcü ve vurgulama her hâlükârda temizlenmeli.
-        gözcüyüDurdur()
-        durumÖğesi.button?.highlight(false)
+    func menuDidClose(_ menu: NSMenu) {
         depo.pencereDurumuDeğişti(açık: false)
     }
 }

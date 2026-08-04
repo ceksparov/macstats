@@ -33,7 +33,7 @@ struct Popupİçeriği: View {
             Divider()
             bellekBölümü
             Divider()
-            altBar
+            pilBölümü
         }
         .padding(14)
         .frame(width: 300)
@@ -162,19 +162,27 @@ struct Popupİçeriği: View {
         }
     }
 
-    // MARK: - Alt bar
+    // MARK: - Pil
 
-    private var altBar: some View {
-        HStack {
-            Text("macstats")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-            Spacer()
-            Button("Çık") { NSApplication.shared.terminate(nil) }
-                .buttonStyle(.borderless)
-                .font(.caption)
+    private var pilBölümü: some View {
+        let p = ölçüm?.pil
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Pil")
+                    .font(.headline)
+                Spacer()
+                // Sağlık = bugünkü kapasite / fabrika kapasitesi. Şarj
+                // seviyesini göstermiyoruz; onu macOS zaten menü barında
+                // gösteriyor, burada tekrar etmenin anlamı yok.
+                Text(yüzde(p?.sağlıkYüzdesi))
+                    .font(.system(size: 22, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+            }
+            satır("Şarj döngüsü", p?.döngü.map(String.init) ?? bilinmiyorİşareti)
         }
     }
+
 
     // MARK: - Ortak satır biçimi
 

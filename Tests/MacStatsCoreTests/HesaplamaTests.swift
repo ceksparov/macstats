@@ -52,7 +52,7 @@ final class SensörSeçimiTests: XCTestCase {
             hızlıÇekirdekler: enYüksek(örnekOkumalar, öneki: "pACC"),
             verimliÇekirdekler: enYüksek(örnekOkumalar, öneki: "eACC"),
             grafik: nil, çipGövdesi: nil, pil: nil, depolama: nil,
-            hamOkumalar: örnekOkumalar
+            çekirdekler: nil, hamOkumalar: örnekOkumalar
         )
         // 51.9 (PMU tcal) değil, 41.5 (en sıcak çekirdek) beklenir.
         XCTAssertEqual(sıcaklıklar.işlemci, 41.5)
@@ -63,19 +63,32 @@ final class SensörSeçimiTests: XCTestCase {
         XCTAssertNil(enYüksek(örnekOkumalar, öneki: "ANE"))
     }
 
-    /// Hız için sadece işimize yarayan sensörleri okuyoruz (57 sensörün hepsini
-    /// okumak ölçüldü: 55 ms; bu liste ile 3.7 ms). Liste daralırken ekranda
-    /// gösterdiğimiz bir grubun düşmediğinden emin olmak istiyoruz.
-    func testHızListesiGösterilenBütünGruplarıKapsar() {
-        let önekler = SıcaklıkOkuyucu.varsayılanÖnekler
-        for isim in ["pACC MTR Temp Sensor2", "eACC MTR Temp Sensor0",
-                     "GPU MTR Temp Sensor1", "gas gauge battery",
-                     "SOC MTR Temp Sensor0", "NAND CH0 temp"] {
-            XCTAssertTrue(önekler.contains { isim.hasPrefix($0) },
-                          "\(isim) listeden düşmüş")
-        }
-        // Kalibrasyon sensörü listeye girmemeli.
-        XCTAssertFalse(önekler.contains { "PMU tcal".hasPrefix($0) })
+    /// Sensör adlarının hangi bileşene ait sayıldığı. Bu eşleme başka Mac
+    /// modellerinde uygulamanın çalışıp çalışmamasını belirliyor.
+    func testSensörGruplaması() {
+        XCTAssertEqual(sensörGrubu("pACC MTR Temp Sensor2"), .işlemciÇekirdeği)
+        XCTAssertEqual(sensörGrubu("eACC MTR Temp Sensor0"), .işlemciÇekirdeği)
+        XCTAssertEqual(sensörGrubu("GPU MTR Temp Sensor1"), .grafik)
+        XCTAssertEqual(sensörGrubu("SOC MTR Temp Sensor0"), .çipGövdesi)
+        XCTAssertEqual(sensörGrubu("PMU tdie1"), .çipGövdesi)
+        XCTAssertEqual(sensörGrubu("gas gauge battery"), .pil)
+        XCTAssertEqual(sensörGrubu("NAND CH0 temp"), .depolama)
+
+        // Tanınmayanlar hiçbir yerde kullanılmamalı: kalibrasyon referansı ve
+        // bağlı olmayan soketler.
+        XCTAssertNil(sensörGrubu("PMU tcal"))
+        XCTAssertNil(sensörGrubu("PMU tdev1"))
+    }
+
+    /// Çekirdek sensörü bulunamayan bir Mac'te işlemci sıcaklığı boş kalmamalı,
+    /// çip gövdesine düşmeli.
+    func testÇekirdekYoksaÇipGövdesineDüşer() {
+        let sıcaklıklar = Sıcaklıklar(
+            hızlıÇekirdekler: nil, verimliÇekirdekler: nil,
+            grafik: nil, çipGövdesi: 47.2, pil: nil, depolama: nil,
+            çekirdekler: nil, hamOkumalar: []
+        )
+        XCTAssertEqual(sıcaklıklar.işlemci, 47.2)
     }
 }
 
@@ -126,9 +139,9 @@ final class GeçmişTests: XCTestCase {
             sıcaklıklar: Sıcaklıklar(
                 hızlıÇekirdekler: sıcaklık, verimliÇekirdekler: nil,
                 grafik: nil, çipGövdesi: nil, pil: nil, depolama: nil,
-                hamOkumalar: []
+                çekirdekler: nil, hamOkumalar: []
             ),
-            işlemci: nil, bellek: nil, termal: .normal, an: an
+            işlemci: nil, bellek: nil, pil: nil, termal: .normal, an: an
         )
     }
 
