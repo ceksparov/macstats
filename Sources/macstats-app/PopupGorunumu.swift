@@ -43,11 +43,12 @@ struct PopupGörünümü: View {
                     .foregroundStyle(sıcaklıkRengi(sıcaklıkSeviyesi(s?.işlemci)))
             }
 
-            satır("Hızlı çekirdekler", uzunSıcaklık(s?.hızlıÇekirdekler))
-            satır("Verimli çekirdekler", uzunSıcaklık(s?.verimliÇekirdekler))
+            // İşlemci için tek bir sayı gösteriyoruz. Hızlı/verimli çekirdek,
+            // çip gövdesi ve SSD ayrımları ölçülmeye devam ediyor (Sıcaklıklar
+            // içinde duruyorlar) ama ekranda yer kaplamalarına değmiyor:
+            // hepsi birkaç derece aralıkta oynayan, aynı hikâyeyi anlatan
+            // sayılar. GPU ve pil ise gerçekten ayrı bileşen, onlar kalıyor.
             satır("Grafik (GPU)", uzunSıcaklık(s?.grafik))
-            satır("Çip gövdesi", uzunSıcaklık(s?.çipGövdesi))
-            satır("Depolama (SSD)", uzunSıcaklık(s?.depolama))
             satır("Pil", uzunSıcaklık(s?.pil))
 
             // Apple'ın kendi termal değerlendirmesi. Sensör okuması bir gün
