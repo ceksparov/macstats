@@ -25,6 +25,13 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
     private let depo = ÖlçümDeposu()
     private var abonelik: AnyCancellable?
 
+    /// Pencere açıkken, uygulamanın DIŞINDAKİ tıklamaları dinleyen gözcü.
+    /// Neden gerekli: NSPopover'ın "transient" davranışı sadece aynı
+    /// uygulamanın içindeki tıklamalarda kapanmayı sağlıyor. Bizim
+    /// uygulamanın başka penceresi olmadığı için o kural hiç devreye
+    /// girmiyordu ve pencere ekranda takılı kalıyordu.
+    private var dışTıklamaGözcüsü: Any?
+
     override init() {
         super.init()
 
@@ -85,14 +92,53 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
     }
 
     @objc private func düğmeyeTıklandı() {
-        if pencere.isShown {
-            pencere.performClose(nil)
-        } else {
-            guard let düğme = durumÖğesi.button else { return }
-            pencere.show(relativeTo: düğme.bounds, of: düğme, preferredEdge: .minY)
-            // Pencere açıldığında öne gelmezse ilk tıklama yutuluyor.
-            NSApp.activate(ignoringOtherApps: true)
+        if pencere.isShown { kapat() } else { aç() }
+    }
+
+    private func aç() {
+        guard let düğme = durumÖğesi.button, !pencere.isShown else { return }
+
+        pencere.show(relativeTo: düğme.bounds, of: düğme, preferredEdge: .minY)
+
+        // NSApp.activate ÇAĞIRMIYORUZ. Odağı zorla almak hem kullanıcının o
+        // sırada yazdığı uygulamadan odağı çalıyor, hem de transient davranışını
+        // bozup pencerenin açık kalmasına yol açıyordu. Pencerenin kendisini
+        // "etkin" yapmak, içindeki düğmenin ilk tıklamada çalışması için yeterli.
+        pencere.contentViewController?.view.window?.makeKey()
+
+        düğme.highlight(true)  // menü barındaki öğe basılı görünsün
+        gözcüyüBaşlat()
+    }
+
+    private func kapat() {
+        gözcüyüDurdur()
+        durumÖğesi.button?.highlight(false)
+
+        // performClose değil close: performClose bir kapatma "isteği" ve
+        // reddedilebiliyor. Hızlı arka arkaya tıklamada istek yarıda kalıp
+        // pencereyi ekranda bırakıyordu. close koşulsuz kapatır.
+        pencere.close()
+    }
+
+    private func gözcüyüBaşlat() {
+        gözcüyüDurdur()
+        // Sadece fare tıklamalarını dinliyoruz. Bunun için macOS'tan ek izin
+        // gerekmiyor; klavye dinlemek isteseydik erişilebilirlik izni şart olurdu
+        // ve bu uygulamanın böyle bir izne ihtiyacı olmamalı.
+        dışTıklamaGözcüsü = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.kapat()
+            }
         }
+    }
+
+    private func gözcüyüDurdur() {
+        if let dışTıklamaGözcüsü {
+            NSEvent.removeMonitor(dışTıklamaGözcüsü)
+        }
+        dışTıklamaGözcüsü = nil
     }
 
     // MARK: - NSPopoverDelegate
@@ -103,6 +149,10 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        // Pencere bizim kapat() dışında bir yoldan da kapanmış olabilir
+        // (Esc, sistem). Gözcü ve vurgulama her hâlükârda temizlenmeli.
+        gözcüyüDurdur()
+        durumÖğesi.button?.highlight(false)
         depo.pencereDurumuDeğişti(açık: false)
     }
 }
