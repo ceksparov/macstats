@@ -36,7 +36,7 @@ struct Popupİçeriği: View {
             pilBölümü
         }
         .padding(14)
-        .frame(width: 300)
+        .frame(width: 330)
     }
 
     // MARK: - Sıcaklık
@@ -49,7 +49,7 @@ struct Popupİçeriği: View {
                 Text("İşlemci")
                     .font(.headline)
                 Spacer()
-                Text(uzunSıcaklık(s?.işlemci))
+                Text(uzunSıcaklık(s?.işlemci, ondalık: 1))
                     .font(.system(size: 22, weight: .medium, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(sıcaklıkRengi(sıcaklıkSeviyesi(s?.işlemci)))
@@ -67,7 +67,6 @@ struct Popupİçeriği: View {
             // hepsi birkaç derece aralıkta oynayan, aynı hikâyeyi anlatan
             // sayılar. GPU ve pil ise gerçekten ayrı bileşen, onlar kalıyor.
             satır("Grafik (GPU)", uzunSıcaklık(s?.grafik))
-            satır("Pil", uzunSıcaklık(s?.pil))
 
             // Apple'ın kendi termal değerlendirmesi. Sensör okuması bir gün
             // bozulsa bile bu resmî API çalışmaya devam eder; o yüzden burada.
@@ -172,14 +171,16 @@ struct Popupİçeriği: View {
                 Text("Pil")
                     .font(.headline)
                 Spacer()
-                // Sağlık = bugünkü kapasite / fabrika kapasitesi. Şarj
-                // seviyesini göstermiyoruz; onu macOS zaten menü barında
-                // gösteriyor, burada tekrar etmenin anlamı yok.
-                Text(yüzde(p?.sağlıkYüzdesi))
+                // Büyük sayı olarak şarj döngüsü. Sağlık yüzdesi kaldırıldı:
+                // döngü sayısı zaten aynı hikâyeyi anlatıyor ve Apple'ın da
+                // servis kararında baktığı sayı o (M1 Air için sınır 1000).
+                Text(p?.döngü.map(String.init) ?? bilinmiyorİşareti)
                     .font(.system(size: 22, weight: .medium, design: .rounded))
                     .monospacedDigit()
             }
-            satır("Şarj döngüsü", p?.döngü.map(String.init) ?? bilinmiyorİşareti)
+            // Pil sıcaklığı buraya taşındı; sıcaklık bölümünde durduğunda
+            // işlemciyle ilgiliymiş gibi görünüyordu.
+            satır("Sıcaklık", uzunSıcaklık(ölçüm?.sıcaklıklar?.pil))
         }
     }
 

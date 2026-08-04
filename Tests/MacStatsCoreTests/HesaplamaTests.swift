@@ -103,9 +103,28 @@ final class BiçimlendirmeTests: XCTestCase {
     }
 
     func testSıcaklıkBiçimleri() {
-        XCTAssertEqual(kısaSıcaklık(41.5), "42°")
-        XCTAssertEqual(kısaSıcaklık(41.4), "41°")
-        XCTAssertEqual(uzunSıcaklık(41.46), "41.5 °C")
+        // Birimi açıkça veriyoruz: aksi hâlde test, testi çalıştıran makinenin
+        // sistem ayarına göre farklı sonuç verirdi.
+        XCTAssertEqual(kısaSıcaklık(41.5, birim: .celsius), "42°")
+        XCTAssertEqual(kısaSıcaklık(41.4, birim: .celsius), "41°")
+
+        // Panelde varsayılan tam sayı; sadece en üstteki büyük sayı ondalıklı.
+        XCTAssertEqual(uzunSıcaklık(41.46, birim: .celsius), "41 °C")
+        XCTAssertEqual(uzunSıcaklık(41.46, ondalık: 1, birim: .celsius), "41.5 °C")
+    }
+
+    func testFahrenheitÇevrimi() {
+        // 0 °C = 32 °F, 100 °C = 212 °F — dönüşümün doğruluğu.
+        XCTAssertEqual(uzunSıcaklık(0, birim: .fahrenheit), "32 °F")
+        XCTAssertEqual(uzunSıcaklık(100, birim: .fahrenheit), "212 °F")
+        XCTAssertEqual(kısaSıcaklık(41.5, birim: .fahrenheit), "107°")
+    }
+
+    func testEşiklerBirimiDeğiştirseDeCelsiusÜzerinden() {
+        // Renk eşikleri hep Celsius; sadece GÖSTERİM birim değiştiriyor.
+        // Aksi hâlde Fahrenheit kullanan biri her zaman kırmızı görürdü.
+        XCTAssertEqual(sıcaklıkSeviyesi(58), .serin)
+        XCTAssertEqual(sıcaklıkSeviyesi(85), .sıcak)
     }
 
     func testGigabaytÇevrimi() {

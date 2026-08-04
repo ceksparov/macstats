@@ -179,6 +179,10 @@ public final class SıcaklıkOkuyucu {
     /// yeniden sormak boşuna iş, isimler çalışma boyunca değişmiyor.
     private var seçilmişSensörler: [(servis: AnyObject, isim: String, grup: SensörGrubu?)]?
 
+    /// Intel Mac'ler için yedek yol. Sadece IOHID hiçbir şey vermezse
+    /// kullanılıyor; Apple Silicon'da hiç çalıştırılmıyor.
+    private let smc = SMCOkuyucu()
+
     public init(hepsiniOku: Bool = false) {
         self.hepsiniOku = hepsiniOku
     }
@@ -195,7 +199,7 @@ public final class SıcaklıkOkuyucu {
     /// Bütün sıcaklıkları okur. Okuyamazsa nil döner.
     public func oku() -> Sıcaklıklar? {
         guard let sensörler = sensörleriGetir(), let olayOku, let ondalıkDeğerAl
-        else { return nil }
+        else { return smcdenOku() }
 
         var okumalar: [SensörOkuması] = []
         for sensör in sensörler {
@@ -214,7 +218,7 @@ public final class SıcaklıkOkuyucu {
             // Hiçbiri cevap vermiyorsa saklanan liste bayatlamış olabilir
             // (uyku, donanım değişikliği). Bir dahakine sıfırdan tarasın.
             seçilmişSensörler = nil
-            return nil
+            return smcdenOku()
         }
         return Sıcaklıklar(
             hızlıÇekirdekler:   enYüksek(okumalar, öneki: "pACC"),
@@ -225,6 +229,22 @@ public final class SıcaklıkOkuyucu {
             depolama:           enYüksek(okumalar, grubu: .depolama),
             çekirdekler:        enYüksek(okumalar, grubu: .işlemciÇekirdeği),
             hamOkumalar:        okumalar
+        )
+    }
+
+    /// Intel Mac yedek yolu: IOHID sensörleri yoksa SMC'yi dener.
+    private func smcdenOku() -> Sıcaklıklar? {
+        let gruplar = smc.gruplaraGöre()
+        guard !gruplar.isEmpty else { return nil }
+        return Sıcaklıklar(
+            hızlıÇekirdekler: nil,     // Intel'de p/e çekirdek ayrımı yok
+            verimliÇekirdekler: nil,
+            grafik: gruplar[.grafik],
+            çipGövdesi: gruplar[.çipGövdesi],
+            pil: gruplar[.pil],
+            depolama: gruplar[.depolama],
+            çekirdekler: gruplar[.işlemciÇekirdeği],
+            hamOkumalar: smc.oku()
         )
     }
 

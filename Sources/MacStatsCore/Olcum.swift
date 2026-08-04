@@ -90,16 +90,54 @@ public final class ÖlçümToplayıcı {
 
 public let bilinmiyorİşareti = "—"
 
-/// Sıcaklığı menü bar için kısa biçimde yazar: "42°"
-public func kısaSıcaklık(_ derece: Double?) -> String {
-    guard let derece else { return bilinmiyorİşareti }
-    return "\(Int(derece.rounded()))°"
+/// Kullanıcının gördüğü sıcaklık birimi.
+public enum SıcaklıkBirimi: Sendable {
+    case celsius
+    case fahrenheit
+
+    var son: String { self == .celsius ? "°C" : "°F" }
+
+    func çevir(_ celsius: Double) -> Double {
+        self == .celsius ? celsius : celsius * 9 / 5 + 32
+    }
 }
 
-/// Sıcaklığı popup için ondalıklı yazar: "42.3 °C"
-public func uzunSıcaklık(_ derece: Double?) -> String {
+/// Sistemin sıcaklık birimi tercihini okur.
+///
+/// Doğru kaynak, Sistem Ayarları → Genel → Dil ve Bölge → Sıcaklık altındaki
+/// ayar; macOS bunu "AppleTemperatureUnit" olarak saklıyor.
+///
+/// Neden Apple'ın MeasurementFormatter'ını kullanmıyoruz: ölçtük, işe
+/// yaramıyor. .naturalScale seçeneğiyle bile en_US bölgesi için 41.5 °C'yi
+/// Fahrenheit'a çevirmedi, olduğu gibi "41.5°C" yazdı. Sıcaklıkta o dönüşümü
+/// yapmıyor.
+///
+/// Ayar hiç değiştirilmemişse anahtar bulunmayabilir; o zaman ölçü sistemine
+/// bakıyoruz — Fahrenheit'ı pratikte yalnızca ABD kullanıyor.
+public func sistemSıcaklıkBirimi() -> SıcaklıkBirimi {
+    if let tercih = UserDefaults.standard.string(forKey: "AppleTemperatureUnit") {
+        return tercih == "Fahrenheit" ? .fahrenheit : .celsius
+    }
+    return Locale.current.measurementSystem == .us ? .fahrenheit : .celsius
+}
+
+/// Sıcaklığı menü bar için kısa biçimde yazar: "42°"
+/// Menü barda birim harfi yok — yer dar ve zaten hep aynı birim.
+public func kısaSıcaklık(_ derece: Double?, birim: SıcaklıkBirimi? = nil) -> String {
     guard let derece else { return bilinmiyorİşareti }
-    return String(format: "%.1f °C", derece)
+    let b = birim ?? sistemSıcaklıkBirimi()
+    return "\(Int(b.çevir(derece).rounded()))°"
+}
+
+/// Sıcaklığı panelde yazar.
+///
+/// ondalık = 1 sadece en üstteki büyük sayı için. Diğer satırlarda 0:
+/// virgülden sonrası ne bilgi katıyor ne de o hassasiyette bir ölçüm;
+/// üstelik sayı sütununu genişletip grafiğe yer bırakmıyordu.
+public func uzunSıcaklık(_ derece: Double?, ondalık: Int = 0, birim: SıcaklıkBirimi? = nil) -> String {
+    guard let derece else { return bilinmiyorİşareti }
+    let b = birim ?? sistemSıcaklıkBirimi()
+    return String(format: "%.\(ondalık)f \(b.son)", b.çevir(derece))
 }
 
 /// Yüzdeyi yazar: "37%"
