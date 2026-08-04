@@ -14,6 +14,9 @@ let package = Package(
         // Menü bar uygulaması da, aşağıdaki terminal araçları da bunu kullanır.
         .target(name: "MacStatsCore"),
 
+        // Asıl uygulama: menü barındaki gösterge ve tıklayınca açılan pencere.
+        .executableTarget(name: "macstats-app", dependencies: ["MacStatsCore"]),
+
         // Terminalde canlı ölçüm gösteren araç. Menü bar arayüzü yazılmadan
         // önce sayıların doğru olduğunu burada doğruluyoruz.
         .executableTarget(name: "macstats-cli", dependencies: ["MacStatsCore"]),
