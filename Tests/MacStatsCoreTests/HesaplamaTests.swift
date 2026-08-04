@@ -25,13 +25,6 @@ final class BellekHesabıTests: XCTestCase {
         XCTAssertEqual(kullanılanBellekBaytı(sayfalar, sayfaBoyutu: 16384), 50 * 16384)
     }
 
-    func testBaskıSeviyeleri() {
-        XCTAssertEqual(BellekBaskısı.hamDeğerden(1), .normal)
-        XCTAssertEqual(BellekBaskısı.hamDeğerden(2), .uyarı)
-        XCTAssertEqual(BellekBaskısı.hamDeğerden(4), .kritik)
-        // Beklenmedik bir değer gelirse tahmin yürütmüyoruz.
-        XCTAssertEqual(BellekBaskısı.hamDeğerden(99), .bilinmiyor)
-    }
 }
 
 
@@ -68,6 +61,21 @@ final class SensörSeçimiTests: XCTestCase {
     func testOlmayanGrupNilDöner() {
         // Sıfır değil nil: "0 derece" ile "bilmiyorum" aynı şey değil.
         XCTAssertNil(enYüksek(örnekOkumalar, öneki: "ANE"))
+    }
+
+    /// Hız için sadece işimize yarayan sensörleri okuyoruz (57 sensörün hepsini
+    /// okumak ölçüldü: 55 ms; bu liste ile 3.7 ms). Liste daralırken ekranda
+    /// gösterdiğimiz bir grubun düşmediğinden emin olmak istiyoruz.
+    func testHızListesiGösterilenBütünGruplarıKapsar() {
+        let önekler = SıcaklıkOkuyucu.varsayılanÖnekler
+        for isim in ["pACC MTR Temp Sensor2", "eACC MTR Temp Sensor0",
+                     "GPU MTR Temp Sensor1", "gas gauge battery",
+                     "SOC MTR Temp Sensor0", "NAND CH0 temp"] {
+            XCTAssertTrue(önekler.contains { isim.hasPrefix($0) },
+                          "\(isim) listeden düşmüş")
+        }
+        // Kalibrasyon sensörü listeye girmemeli.
+        XCTAssertFalse(önekler.contains { "PMU tcal".hasPrefix($0) })
     }
 }
 

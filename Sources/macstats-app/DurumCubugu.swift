@@ -60,6 +60,11 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
         pencere.contentViewController = NSHostingController(
             rootView: PopupGörünümü(depo: depo)
         )
+
+        // SwiftUI görünümünün İLK çizimi pahalı. Uygulama açılırken bir kere
+        // yükleyip bu bedeli baştan ödüyoruz; yoksa ilk tıklamada pencere
+        // gözle görülür şekilde geç geliyor.
+        _ = pencere.contentViewController?.view
     }
 
     /// Menü barındaki yazıyı günceller.

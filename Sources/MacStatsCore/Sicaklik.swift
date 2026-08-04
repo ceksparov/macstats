@@ -113,6 +113,14 @@ public struct Sıcaklıklar: Sendable {
 
 public final class SıcaklıkOkuyucu {
 
+    /// Uygulamanın ekranda gösterdiği sensör grupları. Bu Mac'te 57 sıcaklık
+    /// sensörü var ama hepsini her saniye okumak ölçülerek 55 ms sürüyor —
+    /// pencerenin açılmasını geciktirecek kadar uzun. Sadece işe yarayanları
+    /// okuyunca bu süre büyük ölçüde düşüyor.
+    public static let varsayılanÖnekler = [
+        "pACC", "eACC", "GPU", "SOC MTR", "PMGR SOC", "gas gauge battery", "NAND",
+    ]
+
     /// Sisteme açtığımız sensör bağlantısı. Her ölçümde yeniden açmak pahalı
     /// olurdu, o yüzden bir kere açıp saklıyoruz.
     private var istemci: AnyObject?
@@ -120,39 +128,50 @@ public final class SıcaklıkOkuyucu {
     /// Bağlantı bir kere kurulamadıysa her saniye tekrar denemenin anlamı yok.
     private var kurulumBaşarısız = false
 
-    public init() {}
+    /// nil ise bütün sensörler okunur (tanı aracı bunu kullanıyor).
+    private let önekler: [String]?
+
+    /// İlk okumada seçilip saklanan sensörler. İsimleri de burada duruyor:
+    /// sensörün adını her ölçümde yeniden sormak boşuna iş, isimler değişmiyor.
+    private var seçilmişSensörler: [(servis: AnyObject, isim: String)]?
+
+    public init(önekler: [String]? = SıcaklıkOkuyucu.varsayılanÖnekler) {
+        self.önekler = önekler
+    }
 
     /// Uykudan uyanma sonrası çağrılmalı: uyku boyunca bağlantı ölmüş olabilir
     /// ve ölü bağlantı hata vermez, sadece eski değeri döndürmeye devam eder.
     /// Bunu yaşamadan fark etmek zor olduğu için baştan koyuyoruz.
     public func bağlantıyıYenile() {
         istemci = nil
+        seçilmişSensörler = nil
         kurulumBaşarısız = false
     }
 
     /// Bütün sıcaklıkları okur. Okuyamazsa nil döner.
     public func oku() -> Sıcaklıklar? {
-        guard let servisler = servisleriGetir() else { return nil }
+        guard let sensörler = sensörleriGetir(), let olayOku, let ondalıkDeğerAl
+        else { return nil }
 
         var okumalar: [SensörOkuması] = []
-        for servis in servisler {
-            guard let özellikOku, let olayOku, let ondalıkDeğerAl else { break }
-
-            let isim = (özellikOku(servis, "Product" as CFString)?
-                .takeRetainedValue() as? String) ?? "(isimsiz)"
-
+        for sensör in sensörler {
             // Son iki parametre ayar bayrakları ve zaman damgası; ikisi de 0 =
             // "varsayılan ayarlarla, şu anki değeri ver".
-            guard let olay = olayOku(servis, sıcaklıkOlayTürü, 0, 0)?.takeRetainedValue()
+            guard let olay = olayOku(sensör.servis, sıcaklıkOlayTürü, 0, 0)?.takeRetainedValue()
             else { continue }  // Bu sensör şu an değer vermiyor.
 
             let derece = ondalıkDeğerAl(olay, sıcaklıkDeğerAlanı)
             guard makulAralık.contains(derece) else { continue }
 
-            okumalar.append(SensörOkuması(isim: isim, derece: derece))
+            okumalar.append(SensörOkuması(isim: sensör.isim, derece: derece))
         }
 
-        guard !okumalar.isEmpty else { return nil }
+        guard !okumalar.isEmpty else {
+            // Hiçbiri cevap vermiyorsa saklanan liste bayatlamış olabilir
+            // (uyku, donanım değişikliği). Bir dahakine sıfırdan tarasın.
+            seçilmişSensörler = nil
+            return nil
+        }
         return Sıcaklıklar(
             hızlıÇekirdekler:   enYüksek(okumalar, öneki: "pACC"),
             verimliÇekirdekler: enYüksek(okumalar, öneki: "eACC"),
@@ -164,9 +183,11 @@ public final class SıcaklıkOkuyucu {
         )
     }
 
-    /// Sensör bağlantısını (gerekiyorsa açarak) kullanır ve sensör listesini verir.
-    private func servisleriGetir() -> [AnyObject]? {
-        guard !kurulumBaşarısız else { return nil }
+    /// İlgilendiğimiz sensörleri verir. Liste ilk çağrıda bir kez kurulur,
+    /// sonraki ölçümler doğrudan onu kullanır.
+    private func sensörleriGetir() -> [(servis: AnyObject, isim: String)]? {
+        if let seçilmişSensörler { return seçilmişSensörler }
+        guard !kurulumBaşarısız, let özellikOku else { return nil }
 
         if istemci == nil {
             guard let istemciOluştur, let filtreAyarla,
@@ -185,8 +206,23 @@ public final class SıcaklıkOkuyucu {
             istemci = yeni
         }
 
-        guard let istemci, let servisleriAl else { return nil }
-        return servisleriAl(istemci)?.takeRetainedValue() as? [AnyObject]
+        guard let istemci, let servisleriAl,
+              let hepsi = servisleriAl(istemci)?.takeRetainedValue() as? [AnyObject]
+        else { return nil }
+
+        // İsimleri burada, bir kereye mahsus okuyoruz. Sensör adları çalışma
+        // boyunca değişmiyor; her ölçümde yeniden sormak boşa giden süreydi.
+        var seçilmiş: [(servis: AnyObject, isim: String)] = []
+        for servis in hepsi {
+            let isim = (özellikOku(servis, "Product" as CFString)?
+                .takeRetainedValue() as? String) ?? "(isimsiz)"
+            if let önekler, !önekler.contains(where: { isim.hasPrefix($0) }) { continue }
+            seçilmiş.append((servis, isim))
+        }
+
+        guard !seçilmiş.isEmpty else { return nil }
+        seçilmişSensörler = seçilmiş
+        return seçilmiş
     }
 }
 

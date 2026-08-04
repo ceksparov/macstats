@@ -5,34 +5,16 @@ import Foundation
 //
 // Buradaki her şey de resmî API. Sıcaklık gibi kırılgan değil.
 //
-// EN ÖNEMLİ NOKTA: macOS boş RAM'i israf sayar. Kullanmadığın belleği önbellek
-// olarak doldurur ve ihtiyaç olunca anında boşaltır. Bu yüzden "RAM %88 dolu"
-// yazısı hiçbir şey ifade etmez — makine sağlıklıyken de öyle görünür.
+// Bir dönem burada "bellek baskısı" diye bir gösterge vardı:
+// kern.memorystatus_vm_pressure_level sysctl'i okunup 1/2/4 değerleri
+// normal/uyarı/kritik diye yorumlanıyordu. KALDIRILDI, çünkü doğruluğu
+// gösterilemedi: bu makinede sysctl sürekli 2 ("uyarı") derken macOS'un
+// kendi memory_pressure aracı belleğin %42'sinin boş olduğunu söylüyor ve
+// Apple'ın belgelenmiş bellek baskısı kaynağı hiçbir uyarı vermiyordu.
 //
-// Asıl bilgi "bellek baskısı": macOS'un kendi verdiği, sistem gerçekten
-// zorlanıyor mu sorusunun cevabı. Yüzdeyi de gösteriyoruz ama tek başına değil.
+// Anlamını doğrulayamadığımız bir sayıyı kullanıcıya uyarı olarak göstermek,
+// hiç göstermemekten kötü. Güvenilir bir yolunu bulursak geri gelebilir.
 // ============================================================================
-
-
-/// macOS'un bellek durumu hakkındaki kendi kararı.
-public enum BellekBaskısı: Sendable {
-    case normal      // her şey yolunda
-    case uyarı       // sistem sıkışmaya başladı, sıkıştırma/swap devrede
-    case kritik      // ciddi darlık, uygulamalar yavaşlıyor
-    case bilinmiyor  // okuyamadık — sayı uydurmaktansa bunu göstermek daha dürüst
-
-    /// Çekirdeğin döndürdüğü ham sayıyı anlamlı hâle çevirir.
-    /// Değerler işletim sisteminin bellek baskısı bildirimleriyle aynı:
-    /// 1 = normal, 2 = uyarı, 4 = kritik.
-    public static func hamDeğerden(_ ham: Int32) -> BellekBaskısı {
-        switch ham {
-        case 1: return .normal
-        case 2: return .uyarı
-        case 4: return .kritik
-        default: return .bilinmiyor
-        }
-    }
-}
 
 
 /// Çekirdekten okunan ham sayfa sayıları.
@@ -77,9 +59,8 @@ public struct BellekDurumu: Sendable {
     public let sıkıştırılmışBayt: UInt64
     public let kullanılanBayt: UInt64
     public let swapKullanılanBayt: UInt64
-    public let baskı: BellekBaskısı
 
-    /// 0–100. Yanında baskı göstergesi olmadan tek başına gösterilmemeli.
+    /// 0–100.
     public var kullanımYüzdesi: Double {
         guard toplamBayt > 0 else { return 0 }
         return Double(kullanılanBayt) / Double(toplamBayt) * 100
@@ -105,8 +86,7 @@ public struct BellekOkuyucu {
             kilitliBayt: sayfalar.kilitli * sayfaBoyutu,
             sıkıştırılmışBayt: sayfalar.sıkıştırılmış * sayfaBoyutu,
             kullanılanBayt: kullanılanBellekBaytı(sayfalar, sayfaBoyutu: sayfaBoyutu),
-            swapKullanılanBayt: swapKullanımınıOku(),
-            baskı: baskıyıOku()
+            swapKullanılanBayt: swapKullanımınıOku()
         )
     }
 
@@ -141,11 +121,4 @@ public struct BellekOkuyucu {
         return kullanım.xsu_used
     }
 
-    private func baskıyıOku() -> BellekBaskısı {
-        var seviye: Int32 = 0
-        var uzunluk = MemoryLayout<Int32>.stride
-        guard sysctlbyname("kern.memorystatus_vm_pressure_level", &seviye, &uzunluk, nil, 0) == 0
-        else { return .bilinmiyor }
-        return BellekBaskısı.hamDeğerden(seviye)
-    }
 }

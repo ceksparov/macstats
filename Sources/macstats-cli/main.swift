@@ -50,7 +50,6 @@ for sıra in 1 ... kaçKez {
     // --- Bellek ---
     print("BELLEK")
     if let b = ölçüm.bellek {
-        print("  Bellek baskısı                       \(baskıAdı(b.baskı))   <-- ASIL BAKILACAK YER")
         print("  Kullanılan                           \(gigabayt(b.kullanılanBayt))"
             + " / \(gigabayt(b.toplamBayt))   (\(yüzde(b.kullanımYüzdesi)))")
         print("    uygulamalar                        \(gigabayt(b.uygulamaBayt))")
@@ -84,14 +83,6 @@ func seviyeAdı(_ seviye: SıcaklıkSeviyesi) -> String {
     }
 }
 
-func baskıAdı(_ baskı: BellekBaskısı) -> String {
-    switch baskı {
-    case .normal: return "NORMAL"
-    case .uyarı: return "UYARI"
-    case .kritik: return "KRİTİK"
-    case .bilinmiyor: return bilinmiyorİşareti
-    }
-}
 
 /// Çekirdek yüzdelerini gözle görülebilir küçük çubuklara çevirir.
 func çubuklar(_ yüzdeler: [Double]) -> String {

@@ -10,8 +10,20 @@ import MacStatsCore
 // uyum sağlasın diye).
 // ============================================================================
 
+/// Depoyu izleyen ince sarmalayıcı. İçeriği ayrı tutuyoruz ki görünüm canlı
+/// donanıma bağlı olmadan da (örnek verilerle) çizilebilsin — böylece
+/// tasarımı denemek için uygulamayı çalıştırıp tıklamak gerekmiyor.
 struct PopupGörünümü: View {
     @ObservedObject var depo: ÖlçümDeposu
+
+    var body: some View {
+        Popupİçeriği(ölçüm: depo.ölçüm, geçmiş: depo.geçmiş)
+    }
+}
+
+struct Popupİçeriği: View {
+    let ölçüm: Ölçüm?
+    let geçmiş: Geçmiş
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -30,7 +42,7 @@ struct PopupGörünümü: View {
     // MARK: - Sıcaklık
 
     private var sıcaklıkBölümü: some View {
-        let s = depo.ölçüm?.sıcaklıklar
+        let s = ölçüm?.sıcaklıklar
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
@@ -46,7 +58,7 @@ struct PopupGörünümü: View {
             // Grafik doğrudan büyük sayının altında: tek bir sayı "58 °C" der
             // ama "tırmanıyor mu, oturdu mu" sorusunu cevaplamaz. Grafiğin
             // işi o soruyu cevaplamak, o yüzden sayıya bitişik duruyor.
-            MiniGrafik(geçmiş: depo.geçmiş)
+            MiniGrafik(geçmiş: geçmiş)
                 .padding(.vertical, 2)
 
             // İşlemci için tek bir sayı gösteriyoruz. Hızlı/verimli çekirdek,
@@ -59,7 +71,7 @@ struct PopupGörünümü: View {
 
             // Apple'ın kendi termal değerlendirmesi. Sensör okuması bir gün
             // bozulsa bile bu resmî API çalışmaya devam eder; o yüzden burada.
-            satır("Sistem durumu", depo.ölçüm?.termal.rawValue ?? bilinmiyorİşareti)
+            satır("Sistem durumu", ölçüm?.termal.rawValue ?? bilinmiyorİşareti)
         }
     }
 
@@ -75,7 +87,7 @@ struct PopupGörünümü: View {
     // MARK: - İşlemci
 
     private var işlemciBölümü: some View {
-        let i = depo.ölçüm?.işlemci
+        let i = ölçüm?.işlemci
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
@@ -88,8 +100,9 @@ struct PopupGörünümü: View {
             }
 
             if let i {
-                satır("Uygulamalar", yüzde(i.kullanıcıYüzde))
-                satır("Sistem", yüzde(i.sistemYüzde))
+                // Tek bir yüzde yeterli. "Uygulamalar / sistem" ayrımı
+                // ölçülmeye devam ediyor (terminal aracında görünüyor), ama
+                // menü barından bakan biri için gereksiz ayrıntıydı.
 
                 // M1'de 8 çekirdek: ilk 4'ü verimlilik, son 4'ü performans.
                 HStack(alignment: .bottom, spacing: 3) {
@@ -104,67 +117,48 @@ struct PopupGörünümü: View {
 
     private func çekirdekÇubuğu(_ yüzde: Double) -> some View {
         GeometryReader { alan in
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
+            ZStack(alignment: .bottom) {
+                // Arka şerit: dolu kısım olmadan çubuklar düşük yükte havada
+                // asılı çizgiler gibi görünüyordu; şerit sayesinde her
+                // çekirdeğin nereye kadar dolabileceği belli oluyor.
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.accentColor)
-                    // En düşük yükte bile ince bir iz kalsın ki kaç çekirdek
-                    // olduğu görünsün.
+                    .fill(Color.primary.opacity(0.08))
+
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(çubukRengi)
+                    // En düşük yükte bile ince bir iz kalsın.
                     .frame(height: max(2, alan.size.height * yüzde / 100))
             }
         }
     }
 
+    /// Grafikteki yük dolgusuyla aynı mavi. Sistem vurgu rengi kullanıcıya
+    /// göre gri olabiliyor ve o zaman çubuklar kayboluyordu.
+    private var çubukRengi: Color { Color(red: 0.25, green: 0.55, blue: 1.0) }
+
     // MARK: - Bellek
 
     private var bellekBölümü: some View {
-        let b = depo.ölçüm?.bellek
+        let b = ölçüm?.bellek
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Bellek")
                     .font(.headline)
                 Spacer()
-                // Baskı yüzdeden ÖNCE ve daha görünür duruyor. Sebep: yüzde
-                // tek başına yanıltıcı — bu makinede %72 görünürken sistem
-                // uyarı seviyesinde olabiliyor.
-                Text(baskıAdı(b?.baskı ?? .bilinmiyor))
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(baskıRengi(b?.baskı ?? .bilinmiyor).opacity(0.18))
-                    .foregroundStyle(baskıRengi(b?.baskı ?? .bilinmiyor))
-                    .clipShape(Capsule())
+                Text(yüzde(b?.kullanımYüzdesi))
+                    .font(.system(size: 22, weight: .medium, design: .rounded))
+                    .monospacedDigit()
             }
 
+            // Tek satır: kullanılan / toplam. Kırılım (uygulamalar, kilitli,
+            // sıkıştırılmış, swap) ölçülmeye devam ediyor ve terminal
+            // aracında görünüyor; menü bar penceresinde yer kaplamasına değmez.
             if let b {
-                satır("Kullanılan",
-                      "\(gigabayt(b.kullanılanBayt)) / \(gigabayt(b.toplamBayt))  (\(yüzde(b.kullanımYüzdesi)))")
-                satır("Uygulamalar", gigabayt(b.uygulamaBayt))
-                satır("Kilitli", gigabayt(b.kilitliBayt))
-                satır("Sıkıştırılmış", gigabayt(b.sıkıştırılmışBayt))
-                satır("Swap (diskte)", gigabayt(b.swapKullanılanBayt))
+                satır("Kullanılan", "\(gigabayt(b.kullanılanBayt)) / \(gigabayt(b.toplamBayt))")
             } else {
                 Text(bilinmiyorİşareti).foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private func baskıAdı(_ baskı: BellekBaskısı) -> String {
-        switch baskı {
-        case .normal: return "NORMAL"
-        case .uyarı: return "UYARI"
-        case .kritik: return "KRİTİK"
-        case .bilinmiyor: return bilinmiyorİşareti
-        }
-    }
-
-    private func baskıRengi(_ baskı: BellekBaskısı) -> Color {
-        switch baskı {
-        case .normal: return .green
-        case .uyarı: return .orange
-        case .kritik: return .red
-        case .bilinmiyor: return .secondary
         }
     }
 

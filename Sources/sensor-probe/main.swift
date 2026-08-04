@@ -14,7 +14,7 @@ import MacStatsCore
 print("macstats — sensör tarayıcı")
 print(String(repeating: "=", count: 60))
 
-let okuyucu = SıcaklıkOkuyucu()
+let okuyucu = SıcaklıkOkuyucu(önekler: nil)   // tanı aracı: hepsini göster
 
 guard let sıcaklıklar = okuyucu.oku() else {
     print("\nOKUNAMADI.")
