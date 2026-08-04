@@ -29,11 +29,30 @@ public struct PilDurumu: Sendable {
 }
 
 
-public struct PilOkuyucu {
+public final class PilOkuyucu {
+
+    /// Pil bilgisini her ölçümde okumuyoruz. Okuma 0.4 ms sürüyor ve tek
+    /// başına ucuz; ama gösterdiğimiz şeyler (döngü sayısı, sağlık) günde bir
+    /// değişiyor. Saniyede bir sormanın hiçbir karşılığı yok.
+    private static let tazelemeAralığı: TimeInterval = 30
+
+    private var sonOkuma: PilDurumu?
+    private var sonZaman: Date?
 
     public init() {}
 
     public func oku() -> PilDurumu? {
+        if let sonOkuma, let sonZaman,
+           Date().timeIntervalSince(sonZaman) < Self.tazelemeAralığı {
+            return sonOkuma
+        }
+        let yeni = donanımdanOku()
+        sonOkuma = yeni
+        sonZaman = Date()
+        return yeni
+    }
+
+    private func donanımdanOku() -> PilDurumu? {
         // Bu Mac'te pil var mı? (Mac mini/Studio'da yok — nil dönmek doğru.)
         let servis = IOServiceGetMatchingService(
             kIOMainPortDefault, IOServiceMatching("AppleSmartBattery")

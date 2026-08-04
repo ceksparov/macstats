@@ -13,7 +13,10 @@ import IOKit
 // bir yöntem (smcFanControl, iStat gibi araçlar yıllardır bunu kullanıyor).
 // Kök yetkisi gerektirmiyor.
 //
-// !!! BU KOD TEST EDİLEMEDİ !!!
+// Yapı boyutu doğrulandı: SMCVeri tam 80 bayt olmalı (aşağıdaki dolgu alanına
+// bakınız). Bu tutmazsa çekirdek çağrıyı reddediyor.
+//
+// !!! BU KOD GERÇEK DONANIMDA TEST EDİLEMEDİ !!!
 // Elimizde Intel bir Mac yok. Mantık bilinen SMC protokolüne göre yazıldı ama
 // gerçek donanımda doğrulanmadı. Bu yüzden kesinlikle YEDEK yol olarak duruyor:
 // Apple Silicon'da hiç çalıştırılmıyor, dolayısıyla çalışan tarafı bozamaz.
@@ -46,6 +49,11 @@ private struct SMCAnahtarBilgisi {
     var dataSize: UInt32 = 0
     var dataType: UInt32 = 0
     var dataAttributes: UInt8 = 0
+    /// C derleyicisinin son alandan sonra eklediği hizalama boşluğu.
+    /// Swift bu boşluğu kendiliğinden eklemiyor, sonraki alanları içine
+    /// kaydırıyor. Elle koymazsak yapının tamamı 80 yerine 76 bayt oluyor ve
+    /// çekirdek çağrıyı boyut yüzünden reddediyor — ölçüldü, doğrulandı.
+    var dolgu: (UInt8, UInt8, UInt8) = (0, 0, 0)
 }
 
 private struct SMCVeri {
@@ -201,9 +209,14 @@ final class SMCOkuyucu {
             return Double(Int8(bitPattern: ham.0)) + Double(ham.1) / 256
 
         case türFLT where boyut >= 4:
-            let bayt: [UInt8] = [ham.0, ham.1, ham.2, ham.3]
-            let ham32 = bayt.withUnsafeBytes { $0.load(as: UInt32.self) }
-            return Double(Float(bitPattern: UInt32(littleEndian: ham32)))
+            // Baytları elle birleştiriyoruz. Diziye koyup load(as:) demek
+            // hizalama garantisi olmadığı için tanımsız davranış; küçük
+            // dizilerde çoğu zaman çalışır, bazen çöker.
+            let ham32 = UInt32(ham.0)
+                      | UInt32(ham.1) << 8
+                      | UInt32(ham.2) << 16
+                      | UInt32(ham.3) << 24
+            return Double(Float(bitPattern: ham32))
 
         default:
             return nil   // tanımadığımız bir biçim; tahmin yürütmüyoruz

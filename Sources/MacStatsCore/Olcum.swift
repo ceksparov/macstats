@@ -56,12 +56,16 @@ public struct Ölçüm: Sendable {
 /// Uygulama tarafı sadece bunu tanıyacak; hangi verinin nereden geldiğiyle
 /// ilgilenmesine gerek yok.
 public final class ÖlçümToplayıcı {
-    private let sıcaklıkOkuyucu = SıcaklıkOkuyucu()
+    private let sıcaklıkOkuyucu: SıcaklıkOkuyucu
     private let işlemciOkuyucu = İşlemciOkuyucu()
     private let bellekOkuyucu = BellekOkuyucu()
     private let pilOkuyucu = PilOkuyucu()
 
-    public init() {}
+    /// tümSensörler: menü bar uygulaması için false (hızlı), tanı araçları
+    /// için true (bütün sensörler, tam kırılım).
+    public init(tümSensörler: Bool = false) {
+        sıcaklıkOkuyucu = SıcaklıkOkuyucu(hepsiniOku: tümSensörler)
+    }
 
     public func ölç() -> Ölçüm {
         Ölçüm(

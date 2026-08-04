@@ -12,7 +12,7 @@ import MacStatsCore
 
 let kaçKez = CommandLine.arguments.count > 1 ? (Int(CommandLine.arguments[1]) ?? 5) : 5
 
-let toplayıcı = ÖlçümToplayıcı()
+let toplayıcı = ÖlçümToplayıcı(tümSensörler: true)   // tanı aracı: kırılımın tamamı
 
 print("macstats — canlı ölçüm (\(kaçKez) örnek, saniyede bir)")
 print(String(repeating: "=", count: 64))

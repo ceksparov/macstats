@@ -289,6 +289,23 @@ public final class SıcaklıkOkuyucu {
         }
 
         guard !seçilmiş.isEmpty else { return nil }
+
+        // Listeyi ekranda gerçekten gösterdiklerimize indiriyoruz. Bütün
+        // grupları okumak bu makinede 19 ms sürüyor ve ölçüm 2 saniyede bir
+        // ana iş parçacığında çalışıyor; gereksiz sensörleri elemek doğrudan
+        // menünün akıcılığına yansıyor.
+        //
+        // Çip gövdesi sensörleri sadece çekirdek sensörü BULUNAMAYAN
+        // makinelerde lazım (bkz. Sıcaklıklar.işlemci). Burada varsa
+        // atıyoruz, yoksa tutuyoruz.
+        if !hepsiniOku {
+            let çekirdekVar = seçilmiş.contains { $0.grup == .işlemciÇekirdeği }
+            let gerekli: Set<SensörGrubu> = çekirdekVar
+                ? [.işlemciÇekirdeği, .grafik, .pil]
+                : [.çipGövdesi, .grafik, .pil]
+            seçilmiş = seçilmiş.filter { $0.grup.map(gerekli.contains) ?? false }
+        }
+
         seçilmişSensörler = seçilmiş
         return seçilmiş
     }

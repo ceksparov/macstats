@@ -19,7 +19,20 @@ public final class ÖlçümDeposu: ObservableObject {
     /// Son 60 saniyenin ölçümleri — popup'taki mini grafik için.
     @Published public private(set) var geçmiş = Geçmiş()
 
-    private let toplayıcı = ÖlçümToplayıcı()
+    /// Ölçüm işi bu kuyrukta yapılıyor, ana iş parçacığında değil.
+    ///
+    /// Sebebi: sensör okuması donanımla konuştuğu için birkaç milisaniye
+    /// sürüyor ve bu süre ana iş parçacığını kilitliyordu. Menü açıkken
+    /// saniyede bir olduğu için tam da kullanıcının menüyle uğraştığı anda
+    /// takılmaya yol açıyordu.
+    ///
+    /// Sıralı bir kuyruk seçtik: sensör bağlantısı tek bir iş parçacığından
+    /// kullanılmalı, paralel kuyruk olsa aynı anda iki okuma çakışabilirdi.
+    private let ölçümKuyruğu = DispatchQueue(label: "macstats.olcum", qos: .utility)
+
+    /// Sadece ölçümKuyruğu üzerinden dokunuluyor.
+    nonisolated(unsafe) private let toplayıcı = ÖlçümToplayıcı()
+
     private var zamanlayıcı: Timer?
 
     /// Pencere kapalıyken seyrek, açıkken sık ölçüyoruz.
@@ -74,16 +87,27 @@ public final class ÖlçümDeposu: ObservableObject {
     }
 
     private func ölç() {
-        let yeni = toplayıcı.ölç()
-        ölçüm = yeni
-        geçmiş.ekle(yeni)
+        ölçümKuyruğu.async { [weak self] in
+            guard let self else { return }
+            let yeni = self.toplayıcı.ölç()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self.ölçüm = yeni
+                    self.geçmiş.ekle(yeni)
+                }
+            }
+        }
     }
 
     private func uykudanUyandı() {
-        toplayıcı.uykudanUyandı()
         // Uykuda ölçüm alınmadı; eldeki geçmişi çizmek "bir dakika önce şuydu"
         // izlenimi verirdi ki doğru değil.
         geçmiş.sıfırla()
+        // Toplayıcıya da kendi kuyruğundan dokunuyoruz — başka bir iş
+        // parçacığından çağırmak sensör bağlantısını iki yerden kullanmak olurdu.
+        ölçümKuyruğu.async { [weak self] in
+            self?.toplayıcı.uykudanUyandı()
+        }
         ölç()
     }
 }
