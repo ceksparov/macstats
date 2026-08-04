@@ -26,7 +26,7 @@ struct Popupİçeriği: View {
     let geçmiş: Geçmiş
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             sıcaklıkBölümü
             Divider()
             işlemciBölümü
@@ -35,7 +35,7 @@ struct Popupİçeriği: View {
             Divider()
             pilBölümü
         }
-        .padding(14)
+        .padding(12)
         .frame(width: 330)
     }
 
@@ -44,7 +44,7 @@ struct Popupİçeriği: View {
     private var sıcaklıkBölümü: some View {
         let s = ölçüm?.sıcaklıklar
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text("İşlemci")
                     .font(.headline)
@@ -88,7 +88,7 @@ struct Popupİçeriği: View {
     private var işlemciBölümü: some View {
         let i = ölçüm?.işlemci
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Kullanım")
                     .font(.headline)
@@ -109,7 +109,7 @@ struct Popupİçeriği: View {
                         çekirdekÇubuğu(yüzde)
                     }
                 }
-                .frame(height: 26)
+                .frame(height: 22)
             }
         }
     }
@@ -137,50 +137,45 @@ struct Popupİçeriği: View {
 
     // MARK: - Bellek
 
+    /// Bellek ve pil, başlık + ayrı satır yerine tek satıra sığıyor.
+    /// İkisi de tek sayı gösteriyor; iki satır ayırmak paneli gereksiz
+    /// uzatıyordu. Sıcaklık bölümü büyük kalıyor, asıl bakılan yer o.
     private var bellekBölümü: some View {
         let b = ölçüm?.bellek
-
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Bellek")
-                    .font(.headline)
-                Spacer()
-                Text(yüzde(b?.kullanımYüzdesi))
-                    .font(.system(size: 22, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-            }
-
-            // Tek satır: kullanılan / toplam. Kırılım (uygulamalar, kilitli,
-            // sıkıştırılmış, swap) ölçülmeye devam ediyor ve terminal
-            // aracında görünüyor; menü bar penceresinde yer kaplamasına değmez.
-            if let b {
-                satır("Kullanılan", "\(gigabayt(b.kullanılanBayt)) / \(gigabayt(b.toplamBayt))")
-            } else {
-                Text(bilinmiyorİşareti).foregroundStyle(.secondary)
-            }
-        }
+        let ayrıntı = b.map { "\(gigabayt($0.kullanılanBayt)) / \(gigabayt($0.toplamBayt))" }
+        return sıkışıkSatır("Bellek", ayrıntı: ayrıntı, değer: yüzde(b?.kullanımYüzdesi))
     }
 
     // MARK: - Pil
 
     private var pilBölümü: some View {
-        let p = ölçüm?.pil
+        // Büyük sayı şarj döngüsü; sağlık yüzdesi kaldırılmıştı, döngü zaten
+        // aynı hikâyeyi anlatıyor (M1 Air için sınır 1000).
+        // Pil sıcaklığı da burada: sıcaklık bölümünde dururken işlemciyle
+        // ilgiliymiş gibi görünüyordu.
+        let döngü = ölçüm?.pil?.döngü.map { "\($0)" } ?? bilinmiyorİşareti
+        return sıkışıkSatır(
+            "Pil",
+            ayrıntı: uzunSıcaklık(ölçüm?.sıcaklıklar?.pil),
+            değer: döngü + " döngü"
+        )
+    }
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Pil")
-                    .font(.headline)
-                Spacer()
-                // Büyük sayı olarak şarj döngüsü. Sağlık yüzdesi kaldırıldı:
-                // döngü sayısı zaten aynı hikâyeyi anlatıyor ve Apple'ın da
-                // servis kararında baktığı sayı o (M1 Air için sınır 1000).
-                Text(p?.döngü.map(String.init) ?? bilinmiyorİşareti)
-                    .font(.system(size: 22, weight: .medium, design: .rounded))
+    /// Başlık, küçük ayrıntı ve öne çıkan değer — hepsi tek satırda.
+    private func sıkışıkSatır(_ başlık: String, ayrıntı: String?, değer: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(başlık)
+                .font(.headline)
+            Spacer()
+            if let ayrıntı {
+                Text(ayrıntı)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            // Pil sıcaklığı buraya taşındı; sıcaklık bölümünde durduğunda
-            // işlemciyle ilgiliymiş gibi görünüyordu.
-            satır("Sıcaklık", uzunSıcaklık(ölçüm?.sıcaklıklar?.pil))
+            Text(değer)
+                .font(.system(size: 17, weight: .medium, design: .rounded))
+                .monospacedDigit()
         }
     }
 

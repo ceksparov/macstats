@@ -11,7 +11,7 @@ import MacStatsCore
 // yavaşça iniyor. Üst üste çizilince bu sebep-sonuç ilişkisi doğrudan görünür.
 //
 // Okunaklılık kararları (ilk sürüm okunmuyordu):
-//   - Grafik alanı 58 -> 124 piksel; kısa bir şeritte eğri okunmuyordu.
+//   - Grafik alanı 58 -> 100 piksel; kısa bir şeritte eğri okunmuyordu.
 //   - Derece etiketleri artık grafiğin İÇİNDE değil, solunda kendi sütununda;
 //     üstte ve altta uçuşan 9 puntoluk gri yazılar seçilmiyordu.
 //   - Yük dolgusu %16 saydamlıktan %38'e çıktı ve üstüne ince bir çizgi eklendi;
@@ -24,7 +24,7 @@ import MacStatsCore
 struct MiniGrafik: View {
     let geçmiş: Geçmiş
 
-    private let alanYüksekliği: CGFloat = 124
+    private let alanYüksekliği: CGFloat = 100
     private let etiketGenişliği: CGFloat = 34
 
     // Sistem vurgu rengi kullanıcıya göre gri olabiliyor; dolgunun görünmesi
