@@ -16,6 +16,9 @@ public final class ÖlçümDeposu: ObservableObject {
     /// En son ölçüm. Arayüz bunu izliyor, her değiştiğinde kendini yeniliyor.
     @Published public private(set) var ölçüm: Ölçüm?
 
+    /// Son 60 saniyenin ölçümleri — popup'taki mini grafik için.
+    @Published public private(set) var geçmiş = Geçmiş()
+
     private let toplayıcı = ÖlçümToplayıcı()
     private var zamanlayıcı: Timer?
 
@@ -71,11 +74,16 @@ public final class ÖlçümDeposu: ObservableObject {
     }
 
     private func ölç() {
-        ölçüm = toplayıcı.ölç()
+        let yeni = toplayıcı.ölç()
+        ölçüm = yeni
+        geçmiş.ekle(yeni)
     }
 
     private func uykudanUyandı() {
         toplayıcı.uykudanUyandı()
+        // Uykuda ölçüm alınmadı; eldeki geçmişi çizmek "bir dakika önce şuydu"
+        // izlenimi verirdi ki doğru değil.
+        geçmiş.sıfırla()
         ölç()
     }
 }

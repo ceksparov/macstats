@@ -94,10 +94,84 @@ final class BiçimlendirmeTests: XCTestCase {
 
     func testSıcaklıkSeviyesiEşikleri() {
         XCTAssertEqual(sıcaklıkSeviyesi(45), .serin)
-        XCTAssertEqual(sıcaklıkSeviyesi(69.9), .serin)
-        XCTAssertEqual(sıcaklıkSeviyesi(70), .ılık)
-        XCTAssertEqual(sıcaklıkSeviyesi(89.9), .ılık)
-        XCTAssertEqual(sıcaklıkSeviyesi(90), .sıcak)
+        XCTAssertEqual(sıcaklıkSeviyesi(59.9), .serin)
+        XCTAssertEqual(sıcaklıkSeviyesi(60), .ılık)
+        XCTAssertEqual(sıcaklıkSeviyesi(79.9), .ılık)
+        XCTAssertEqual(sıcaklıkSeviyesi(80), .sıcak)
         XCTAssertEqual(sıcaklıkSeviyesi(nil), .bilinmiyor)
+    }
+
+    /// Ölçülen gerçek değerler eşiklerin doğru tarafında kalmalı: bu makine
+    /// boşta ~33 °C, 2.5 dakika tam yükte ~58 °C görüyor. İkisi de "serin"
+    /// olmalı, yoksa renk uyarısı sürekli yanıp anlamını yitirir.
+    func testÖlçülenGerçekDeğerlerSerinTarafta() {
+        XCTAssertEqual(sıcaklıkSeviyesi(33.3), .serin)
+        XCTAssertEqual(sıcaklıkSeviyesi(57.9), .serin)
+    }
+}
+
+
+final class GeçmişTests: XCTestCase {
+
+    private func ölçümÜret(an: Date, sıcaklık: Double) -> Ölçüm {
+        Ölçüm(
+            sıcaklıklar: Sıcaklıklar(
+                hızlıÇekirdekler: sıcaklık, verimliÇekirdekler: nil,
+                grafik: nil, çipGövdesi: nil, pil: nil, depolama: nil,
+                hamOkumalar: []
+            ),
+            işlemci: nil, bellek: nil, termal: .normal, an: an
+        )
+    }
+
+    func testPencereDışındakiNoktalarAtılır() {
+        let başlangıç = Date()
+        var geçmiş = Geçmiş()
+
+        // 0., 30. ve 90. saniyeler. İlki 60 saniyelik pencerenin dışında kalmalı.
+        geçmiş.ekle(ölçümÜret(an: başlangıç, sıcaklık: 40))
+        geçmiş.ekle(ölçümÜret(an: başlangıç.addingTimeInterval(30), sıcaklık: 50))
+        geçmiş.ekle(ölçümÜret(an: başlangıç.addingTimeInterval(90), sıcaklık: 60))
+
+        XCTAssertEqual(geçmiş.noktalar.count, 2)
+        XCTAssertEqual(geçmiş.noktalar.first?.sıcaklık, 50)
+    }
+
+    func testUykuSonrasıSıfırlanır() {
+        var geçmiş = Geçmiş()
+        geçmiş.ekle(ölçümÜret(an: Date(), sıcaklık: 40))
+        XCTAssertFalse(geçmiş.noktalar.isEmpty)
+
+        geçmiş.sıfırla()
+        XCTAssertTrue(geçmiş.noktalar.isEmpty)
+    }
+}
+
+
+final class GrafikÖlçeğiTests: XCTestCase {
+
+    func testKüçükDalgalanmaBüyütülmez() {
+        // 1 derecelik oynama, eksene birebir uydurulsaydı dağ gibi görünürdü.
+        // En az 20 derecelik aralık dayatıldığı için düz görünmeli.
+        let ölçek = grafikÖlçeği([40.0, 41.0])
+        // 40.5 merkezli, 20 derece genişliğinde bir pencere beklenir.
+        XCTAssertEqual(ölçek?.alt ?? 0, 30.5, accuracy: 0.001)
+        XCTAssertEqual(ölçek?.üst ?? 0, 50.5, accuracy: 0.001)
+    }
+
+    func testGerçekTırmanışGrafiğiDoldurur() {
+        // Ölçtüğümüz yük denemesi: 45 -> 58 derece. Aralık 20'nin altında
+        // olduğu için yine en az aralık uygulanır.
+        let ölçek = grafikÖlçeği([45.3, 49.7, 51.3, 54.9, 57.9])
+        XCTAssertEqual((ölçek?.üst ?? 0) - (ölçek?.alt ?? 0), 20, accuracy: 0.001)
+
+        // Geniş bir aralıkta ise değerlere uyup biraz pay bırakır.
+        let geniş = grafikÖlçeği([30.0, 90.0])
+        XCTAssertEqual(geniş?.alt ?? 0, 21, accuracy: 0.001)
+        XCTAssertEqual(geniş?.üst ?? 0, 99, accuracy: 0.001)
+    }
+
+    func testBoşListeÖlçekVermez() {
+        XCTAssertNil(grafikÖlçeği([]))
     }
 }

@@ -98,12 +98,13 @@ final class DurumÇubuğu: NSObject, NSPopoverDelegate {
     private func aç() {
         guard let düğme = durumÖğesi.button, !pencere.isShown else { return }
 
-        pencere.show(relativeTo: düğme.bounds, of: düğme, preferredEdge: .minY)
+        // Bu satır şart: NSPopover, uygulaması etkin değilken görünmüyor.
+        // Bir ara "odak çalmasın" diye kaldırmıştım; ölçtüğümüzde uygulama
+        // arka plandayken pencerenin hiç açılmadığı ortaya çıktı. Takılma
+        // sorununu çözen şey bu satır değil, aşağıdaki dış tıklama gözcüsü.
+        NSApp.activate(ignoringOtherApps: true)
 
-        // NSApp.activate ÇAĞIRMIYORUZ. Odağı zorla almak hem kullanıcının o
-        // sırada yazdığı uygulamadan odağı çalıyor, hem de transient davranışını
-        // bozup pencerenin açık kalmasına yol açıyordu. Pencerenin kendisini
-        // "etkin" yapmak, içindeki düğmenin ilk tıklamada çalışması için yeterli.
+        pencere.show(relativeTo: düğme.bounds, of: düğme, preferredEdge: .minY)
         pencere.contentViewController?.view.window?.makeKey()
 
         düğme.highlight(true)  // menü barındaki öğe basılı görünsün

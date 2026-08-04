@@ -43,6 +43,12 @@ struct PopupGörünümü: View {
                     .foregroundStyle(sıcaklıkRengi(sıcaklıkSeviyesi(s?.işlemci)))
             }
 
+            // Grafik doğrudan büyük sayının altında: tek bir sayı "58 °C" der
+            // ama "tırmanıyor mu, oturdu mu" sorusunu cevaplamaz. Grafiğin
+            // işi o soruyu cevaplamak, o yüzden sayıya bitişik duruyor.
+            MiniGrafik(geçmiş: depo.geçmiş)
+                .padding(.vertical, 2)
+
             // İşlemci için tek bir sayı gösteriyoruz. Hızlı/verimli çekirdek,
             // çip gövdesi ve SSD ayrımları ölçülmeye devam ediyor (Sıcaklıklar
             // içinde duruyorlar) ama ekranda yer kaplamalarına değmiyor:

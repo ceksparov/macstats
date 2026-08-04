@@ -108,20 +108,24 @@ public func gigabayt(_ bayt: UInt64?) -> String {
 }
 
 /// Sıcaklığı üç kabaca seviyeye ayırır. Menü barda renk seçmek için.
-/// Eşikler fansız bir M1 Air'e göre: bu makine yükte 90 °C'yi rahat görür,
-/// bu normaldir; asıl dikkat edilecek yer 95 üstüdür.
+///
+/// Eşikler bu makinede ölçülerek belirlendi. Önce 70/90 denenmişti, ama
+/// 8 çekirdek 2.5 dakika tam yükte çalıştırıldığında sıcaklık ancak 58 °C'ye
+/// çıktı — yani o eşiklerle renkler hiç görünmeyecek, ölü bir özellik olacaktı.
+/// 60/80 ile turuncu "makine gerçekten çalışıyor", kırmızı "buna bir bak"
+/// anlamına geliyor.
 public enum SıcaklıkSeviyesi: Sendable {
-    case serin    // < 70
-    case ılık     // 70–89
-    case sıcak    // >= 90
+    case serin    // < 60
+    case ılık     // 60–79
+    case sıcak    // >= 80
     case bilinmiyor
 }
 
 public func sıcaklıkSeviyesi(_ derece: Double?) -> SıcaklıkSeviyesi {
     guard let derece else { return .bilinmiyor }
     switch derece {
-    case ..<70: return .serin
-    case ..<90: return .ılık
+    case ..<60: return .serin
+    case ..<80: return .ılık
     default:    return .sıcak
     }
 }
