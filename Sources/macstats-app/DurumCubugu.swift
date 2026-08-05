@@ -6,22 +6,28 @@ import MacStatsCore
 // ============================================================================
 // MENÜ BARINDAKİ GÖSTERGE
 //
-// Neden NSMenu, neden NSPopover değil:
+// NSPopover kullanıyoruz — NSMenu'den GERİ döndük. Sebebi: NSMenu'nün hiç
+// animasyonu yok, OS anında çiziyor; NSPopover'ın kayarak açılıp kapanan
+// varsayılan animasyonu var (.animates, varsayılan true — elle bir şey
+// yapmıyoruz).
 //
-// Önce NSPopover kullanıyorduk ve iki sorun çıktı. Birincisi hız — popover
-// gerçek bir pencere: uygulamanın öne gelmesi, pencerenin yaratılması ve
-// içeriğin çizilmesi gerekiyor. NSMenu'yü ise işletim sisteminin menü sistemi
-// çiziyor, uygulamanın öne gelmesine bile gerek yok. İkincisi de şuydu:
-// menü barındaki simgeye tekrar tıklayınca pencere kapanmıyordu. Sebebi
-// AppKit'in popover'ı önce kendi kapatması, hemen ardından bizim tıklama
-// işleyicimizin "kapalıymış, açayım" deyip yeniden açmasıydı.
+// Bunu daha önce bir kere denemiştik ve iki soruna takılmıştık:
+//   1. Simgeye tekrar tıklayınca pencere kapanmıyordu. Sebep: AppKit
+//      popover'ı önce kendi kapatıyor, hemen ardından bizim tıklama
+//      işleyicimiz "kapalıymış, açayım" deyip anında yeniden açıyordu.
+//   2. NSPopover'ın "transient" davranışı sadece AYNI UYGULAMANIN içindeki
+//      tıklamalarda kapanıyor; başka bir uygulamaya tıklayınca hiç
+//      tetiklenmiyordu, pencere ekranda takılı kalıyordu.
 //
-// NSMenu bu işlerin hepsini kendisi hallediyor: açma, kapama, tekrar tıklayınca
-// kapanma, dışarı tıklayınca kapanma, Esc. Elle yazdığımız her şey (dış tıklama
-// gözcüsü, koşulsuz kapatma, uygulamayı öne alma) gereksizleşti ve silindi.
+// İkisi de çözüldü: (1) performClose yerine koşulsuz close() — performClose
+// bir "istek", hızlı art arda tıklamada yarıda kalabiliyordu; (2) uygulama
+// dışındaki tıklamaları dinleyen kendi gözcümüz (aşağıda gözcüyüBaşlat/
+// gözcüyüDurdur), OS'un transient davranışına güvenmek yerine.
 //
-// SwiftUI'dan vazgeçmedik: menünün ilk satırı, içine SwiftUI görünümü konmuş
-// tek bir NSMenuItem. Yani düzen hâlâ SwiftUI, açılma hızı AppKit'in.
+// NSMenu'nün bir avantajını kaybettik: orada "Girişte başlat" ve "Çık" ayrı
+// NSMenuItem'lardı. Popover'ın öyle bir liste kavramı yok — tek bir içerik
+// görünümü. O yüzden ikisi de artık SwiftUI panelinin alt kısmında
+// (bkz. PopupGorunumu.swift'teki altBar).
 //
 // Menü barındaki YAZI için hâlâ elle kurulmuş bir metin kullanıyoruz:
 // rakamların eşit genişlikte olması gerekiyor, yoksa sayı her değiştiğinde
@@ -29,18 +35,15 @@ import MacStatsCore
 // ============================================================================
 
 @MainActor
-final class DurumÇubuğu: NSObject, NSMenuDelegate {
+final class DurumÇubuğu: NSObject, NSPopoverDelegate {
 
     private let durumÖğesi = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let menü = NSMenu()
+    private let pencere = NSPopover()
     private let depo = ÖlçümDeposu()
     private var abonelik: AnyCancellable?
 
-    /// Menünün üst kısmındaki SwiftUI paneli. Depoyu kendisi izlediği için
-    /// menü açıkken kendini yeniliyor.
-    private var panel: NSHostingView<PopupGörünümü>?
-
-    private var girişteBaşlatÖğesi: NSMenuItem?
+    /// Pencere açıkken, uygulamanın DIŞINDAKİ tıklamaları dinleyen gözcü.
+    private var dışTıklamaGözcüsü: Any?
 
     /// Renklendirilmemiş orijinal termometre simgesi. İki yerde lazım:
     /// henüz ölçüm yokken (varsayılan görünüm) ve her ölçümde yeni
@@ -50,7 +53,7 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
     override init() {
         super.init()
         düğmeyiKur()
-        menüyüKur()
+        pencereyiKur()
 
         // Her yeni ölçümde menü barındaki yazıyı tazele.
         abonelik = depo.$ölçüm.sink { [weak self] ölçüm in
@@ -60,66 +63,36 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
 
     private func düğmeyiKur() {
         guard let düğme = durumÖğesi.button else { return }
-        // Şablon simge: rengini contentTintColor belirliyor. Şablon olmasaydı
-        // simgenin kendi renkleri kullanılırdı ve boyayamazdık.
+        // Şablon simge: rengini kendimiz boyuyoruz (bkz. boyanmışSimge).
         let simge = NSImage(systemSymbolName: "thermometer.medium",
                             accessibilityDescription: "İşlemci sıcaklığı")
         simge?.isTemplate = true
         temelSimge = simge
         düğme.image = simge
         düğme.imagePosition = .imageLeading
+        düğme.target = self
+        düğme.action = #selector(düğmeyeTıklandı)
     }
 
-    private func menüyüKur() {
-        menü.delegate = self
-
-        // Üst kısım: bütün göstergeleri içeren tek bir SwiftUI görünümü.
-        let panelÖğesi = NSMenuItem()
-        let görünüm = NSHostingView(rootView: PopupGörünümü(depo: depo))
-        // Menü içindeki görünümler kendi boylarını kendileri ayarlayamıyor;
-        // ölçüyü SwiftUI'a sorup elle veriyoruz.
-        görünüm.frame = NSRect(origin: .zero, size: görünüm.fittingSize)
-        panelÖğesi.view = görünüm
-        panel = görünüm
-        menü.addItem(panelÖğesi)
-
-        menü.addItem(.separator())
-
-        // AYARLAR — ayrı bir pencereye gerek yok, menünün kendisi yeterli.
-        let giriş = NSMenuItem(
-            title: "Girişte başlat", action: #selector(girişteBaşlatDeğiştir), keyEquivalent: ""
+    private func pencereyiKur() {
+        pencere.behavior = .transient
+        // .animates elle ayarlanmıyor — varsayılan true, istediğimiz
+        // kayarak açılma/kapanma efekti bu.
+        pencere.delegate = self
+        pencere.contentViewController = NSHostingController(
+            rootView: PopupGörünümü(depo: depo)
         )
-        giriş.target = self
-        menü.addItem(giriş)
-        girişteBaşlatÖğesi = giriş
-
-        menü.addItem(.separator())
-
-        menü.addItem(NSMenuItem(
-            title: "Çık", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"
-        ))
-
-        // Menüyü doğrudan durum öğesine bağlıyoruz: tıklama, tekrar tıklama,
-        // dışarı tıklama ve Esc davranışlarını AppKit üstleniyor.
-        durumÖğesi.menu = menü
     }
 
-    /// Menü barındaki yazıyı günceller.
+    /// Menü barındaki yazıyı ve simgeyi günceller.
     private func yazıyıGüncelle(_ ölçüm: Ölçüm?) {
         guard let düğme = durumÖğesi.button else { return }
 
         let derece = ölçüm?.sıcaklıklar?.işlemci
 
-        // Renk simgede, sayı nötr. Sayı da renkli olsaydı menü barında iki
-        // renkli öğe yan yana dururdu ve rakamların okunması zorlaşırdı;
-        // simge sinyali taşımaya yetiyor.
-        //
-        // contentTintColor DENENDİ VE ÇALIŞMADI: ekran görüntüsüyle piksel
-        // piksel doğrulandı, hem statik hem dinamik NSColor ile simge hep
-        // varsayılan siyah-beyaz kaldı (R=G=B). Status bar'daki SF Symbol
-        // görüntüleri bu özelliği bu ortamda hiç dikkate almıyor. Onun yerine
-        // simgeyi kendimiz boyayıp yeni bir görüntü olarak veriyoruz —
-        // sistemin otomatik tonlamasına bağlı değil, garantili çalışıyor.
+        // contentTintColor DENENDİ VE ÇALIŞMADI (ekran görüntüsüyle piksel
+        // piksel doğrulandı — status bar SF Symbol'leri bunu dikkate almıyor).
+        // Onun yerine simgeyi kendimiz boyayıp yeni bir görüntü olarak veriyoruz.
         if let renk = simgeRengi(derece), let temelSimge {
             düğme.image = boyanmışSimge(temelSimge, renk: renk)
         } else {
@@ -143,13 +116,8 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
         return NSColor(srgbRed: renk.kırmızı, green: renk.yeşil, blue: renk.mavi, alpha: 1)
     }
 
-    /// Şablon bir görüntüyü verilen renge boyar.
-    ///
-    /// contentTintColor'a güvenmek yerine bunu tercih ediyoruz: alfa
-    /// kanalını (şeklin kendisini) koruyup üstüne düz renk dolduruyoruz —
-    /// `.sourceAtop` sadece şeklin İÇİNDE kalan piksellere boya sürüyor,
-    /// şeffaf kısımlara dokunmuyor. Sonuç, sistemin otomatik tonlama
-    /// mekanizmasından bağımsız, garantili şekilde boyanmış bir görüntü.
+    /// Şablon bir görüntüyü verilen renge boyar. `.sourceAtop` sadece şeklin
+    /// İÇİNDE kalan piksellere boya sürüyor, şeffaf kısımlara dokunmuyor.
     private func boyanmışSimge(_ taban: NSImage, renk: NSColor) -> NSImage {
         let boyanmış = NSImage(size: taban.size)
         boyanmış.lockFocus()
@@ -160,27 +128,59 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
         return boyanmış
     }
 
-    @objc private func girişteBaşlatDeğiştir() {
-        GirişteBaşlat.ayarla(!GirişteBaşlat.açık)
-        // Onay işaretini istediğimize değil GERÇEKLEŞENE göre koyuyoruz:
-        // kayıt başarısız olabilir (örneğin .app paketi dışından çalışırken).
-        girişteBaşlatÖğesi?.state = GirişteBaşlat.açık ? .on : .off
+    @objc private func düğmeyeTıklandı() {
+        if pencere.isShown { kapat() } else { aç() }
     }
 
-    // MARK: - NSMenuDelegate
+    private func aç() {
+        guard let düğme = durumÖğesi.button, !pencere.isShown else { return }
+        pencere.show(relativeTo: düğme.bounds, of: düğme, preferredEdge: .minY)
+        // Pencerenin kendi penceresini "etkin" yapmak, uygulamanın tamamını
+        // öne almadan (NSApp.activate olmadan) düğmelerin ilk tıklamada
+        // çalışması için yeterli.
+        pencere.contentViewController?.view.window?.makeKey()
+        düğme.highlight(true)
+        gözcüyüBaşlat()
+    }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        girişteBaşlatÖğesi?.state = GirişteBaşlat.açık ? .on : .off
-        depo.pencereDurumuDeğişti(açık: true)
+    private func kapat() {
+        gözcüyüDurdur()
+        durumÖğesi.button?.highlight(false)
+        // performClose değil close: performClose bir kapatma "isteği" ve
+        // reddedilebiliyor. Hızlı arka arkaya tıklamada istek yarıda kalıp
+        // pencereyi ekranda bırakıyordu. close koşulsuz kapatır.
+        pencere.close()
+    }
 
-        // İçeriğin boyu değişmiş olabilir (grafik "veri toplanıyor" yazısından
-        // gerçek çizime geçince). Menü açılmadan hemen önce ölçüyü tazeliyoruz.
-        if let panel {
-            panel.frame = NSRect(origin: .zero, size: panel.fittingSize)
+    private func gözcüyüBaşlat() {
+        gözcüyüDurdur()
+        // Sadece fare tıklamalarını dinliyoruz — ek izin gerekmiyor.
+        dışTıklamaGözcüsü = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.kapat() }
         }
     }
 
-    func menuDidClose(_ menu: NSMenu) {
+    private func gözcüyüDurdur() {
+        if let dışTıklamaGözcüsü {
+            NSEvent.removeMonitor(dışTıklamaGözcüsü)
+        }
+        dışTıklamaGözcüsü = nil
+    }
+
+    // MARK: - NSPopoverDelegate
+    // Pencere açıkken daha sık ölçüyoruz, kapanınca geri seyreltiyoruz.
+
+    func popoverDidShow(_ notification: Notification) {
+        depo.pencereDurumuDeğişti(açık: true)
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        // Pencere bizim kapat() dışında bir yoldan da kapanmış olabilir
+        // (Esc, sistem). Gözcü ve vurgulama her hâlükârda temizlenmeli.
+        gözcüyüDurdur()
+        durumÖğesi.button?.highlight(false)
         depo.pencereDurumuDeğişti(açık: false)
     }
 }

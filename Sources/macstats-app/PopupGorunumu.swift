@@ -34,9 +34,40 @@ struct Popupİçeriği: View {
             bellekBölümü
             Divider()
             pilBölümü
+            Divider()
+            altBar
         }
         .padding(12)
         .frame(width: 330)
+    }
+
+    // MARK: - Alt bar
+    //
+    // "Girişte başlat" ve "Çık" eskiden ayrı NSMenuItem'lardı (NSMenu
+    // döneminde). NSPopover'ın öyle bir liste kavramı yok — tek içerik
+    // görünümü — o yüzden ikisi de panelin parçası.
+
+    private var altBar: some View {
+        HStack {
+            Toggle("Girişte başlat", isOn: girişteBaşlatBağlantısı)
+                .toggleStyle(.checkbox)
+                .font(.callout)
+            Spacer()
+            Button("Çık") { NSApplication.shared.terminate(nil) }
+                .buttonStyle(.borderless)
+                .font(.callout)
+        }
+    }
+
+    /// GirişteBaşlat statik bir tip (SMAppService'in kendi durumunu okuyor),
+    /// SwiftUI'a @State olarak taşımak yerine doğrudan onun üzerinden okuyup
+    /// yazan bir Binding kuruyoruz. Onay işareti istenene değil GERÇEKLEŞENE
+    /// göre kalıyor — kayıt başarısız olabilir (.app paketi dışından çalışırken).
+    private var girişteBaşlatBağlantısı: Binding<Bool> {
+        Binding(
+            get: { GirişteBaşlat.açık },
+            set: { GirişteBaşlat.ayarla($0) }
+        )
     }
 
     // MARK: - Sıcaklık
