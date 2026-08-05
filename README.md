@@ -87,11 +87,6 @@ Kodda anlaşılmayabilecek yerlerin çoğu yorumlarla açıklandı. Öne çıkan
 - **Ölçüm ana iş parçacığında yapılmıyor** ve yalnızca ekranda gösterilen
   sensörler okunuyor — bir ölçüm 55 ms'ten 3.3 ms'e indi.
 
-## Teşekkür
-
-Intel SMC anahtarları [jkuri/macstats](https://github.com/jkuri/macstats)
-ile çapraz doğrulandı — 2015'ten beri geliştirilen, bağımsız bir proje.
-
 ## Lisans
 
 [MIT](LICENSE)
