@@ -42,6 +42,11 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
 
     private var girişteBaşlatÖğesi: NSMenuItem?
 
+    /// Renklendirilmemiş orijinal termometre simgesi. İki yerde lazım:
+    /// henüz ölçüm yokken (varsayılan görünüm) ve her ölçümde yeni
+    /// boyanmış bir kopya üretirken kaynak olarak.
+    private var temelSimge: NSImage?
+
     override init() {
         super.init()
         düğmeyiKur()
@@ -60,6 +65,7 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
         let simge = NSImage(systemSymbolName: "thermometer.medium",
                             accessibilityDescription: "İşlemci sıcaklığı")
         simge?.isTemplate = true
+        temelSimge = simge
         düğme.image = simge
         düğme.imagePosition = .imageLeading
     }
@@ -107,7 +113,18 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
         // Renk simgede, sayı nötr. Sayı da renkli olsaydı menü barında iki
         // renkli öğe yan yana dururdu ve rakamların okunması zorlaşırdı;
         // simge sinyali taşımaya yetiyor.
-        düğme.contentTintColor = simgeRengi(derece)
+        //
+        // contentTintColor DENENDİ VE ÇALIŞMADI: ekran görüntüsüyle piksel
+        // piksel doğrulandı, hem statik hem dinamik NSColor ile simge hep
+        // varsayılan siyah-beyaz kaldı (R=G=B). Status bar'daki SF Symbol
+        // görüntüleri bu özelliği bu ortamda hiç dikkate almıyor. Onun yerine
+        // simgeyi kendimiz boyayıp yeni bir görüntü olarak veriyoruz —
+        // sistemin otomatik tonlamasına bağlı değil, garantili çalışıyor.
+        if let renk = simgeRengi(derece), let temelSimge {
+            düğme.image = boyanmışSimge(temelSimge, renk: renk)
+        } else {
+            düğme.image = temelSimge
+        }
 
         düğme.attributedTitle = NSAttributedString(
             string: " " + kısaSıcaklık(derece),
@@ -121,18 +138,31 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
     }
 
     /// Termometre simgesinin rengi (bkz. IsiRengi.swift — kızılötesi ısı haritası).
-    ///
-    /// Menü barı, sistem açık temada olsa bile koyu olabiliyor (koyu duvar
-    /// kâğıdında). O yüzden rengi sabit vermiyoruz: NSColor'a iki ton veriyoruz
-    /// ve hangisinin kullanılacağına çizim anında menü barının kendi görünümü
-    /// karar veriyor.
+    /// Menü barının açık/koyu olduğuna göre iki tondan biri seçiliyor;
+    /// bunu durum öğesinin kendi görünümünden okuyoruz.
     private func simgeRengi(_ derece: Double?) -> NSColor? {
-        guard derece != nil else { return nil }   // nil = menü barının kendi rengi
-        return NSColor(name: nil) { görünüm in
-            let koyu = görünüm.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            guard let renk = ısıRengi(derece, koyuZemin: koyu) else { return .labelColor }
-            return NSColor(srgbRed: renk.kırmızı, green: renk.yeşil, blue: renk.mavi, alpha: 1)
-        }
+        guard derece != nil else { return nil }
+        let koyu = durumÖğesi.button?.effectiveAppearance
+            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        guard let renk = ısıRengi(derece, koyuZemin: koyu) else { return nil }
+        return NSColor(srgbRed: renk.kırmızı, green: renk.yeşil, blue: renk.mavi, alpha: 1)
+    }
+
+    /// Şablon bir görüntüyü verilen renge boyar.
+    ///
+    /// contentTintColor'a güvenmek yerine bunu tercih ediyoruz: alfa
+    /// kanalını (şeklin kendisini) koruyup üstüne düz renk dolduruyoruz —
+    /// `.sourceAtop` sadece şeklin İÇİNDE kalan piksellere boya sürüyor,
+    /// şeffaf kısımlara dokunmuyor. Sonuç, sistemin otomatik tonlama
+    /// mekanizmasından bağımsız, garantili şekilde boyanmış bir görüntü.
+    private func boyanmışSimge(_ taban: NSImage, renk: NSColor) -> NSImage {
+        let boyanmış = NSImage(size: taban.size)
+        boyanmış.lockFocus()
+        taban.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1)
+        renk.set()
+        NSRect(origin: .zero, size: taban.size).fill(using: .sourceAtop)
+        boyanmış.unlockFocus()
+        return boyanmış
     }
 
     @objc private func girişteBaşlatDeğiştir() {

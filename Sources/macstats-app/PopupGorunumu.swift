@@ -25,6 +25,10 @@ struct Popupİçeriği: View {
     let ölçüm: Ölçüm?
     let geçmiş: Geçmiş
 
+    // Panel rengi menü bar simgesiyle aynı ısı skalasını kullanıyor; hangi
+    // tonun (açık/koyu) seçileceğine bu belirliyor.
+    @Environment(\.colorScheme) private var renkŞeması
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             sıcaklıkBölümü
@@ -52,7 +56,7 @@ struct Popupİçeriği: View {
                 Text(uzunSıcaklık(s?.işlemci, ondalık: 1))
                     .font(.system(size: 22, weight: .medium, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(sıcaklıkRengi(sıcaklıkSeviyesi(s?.işlemci)))
+                    .foregroundStyle(panelIsiRengi(s?.işlemci, karanlık: renkŞeması == .dark))
             }
 
             // Grafik doğrudan büyük sayının altında: tek bir sayı "58 °C" der
@@ -74,14 +78,6 @@ struct Popupİçeriği: View {
         }
     }
 
-    private func sıcaklıkRengi(_ seviye: SıcaklıkSeviyesi) -> Color {
-        switch seviye {
-        case .serin: return .primary
-        case .ılık: return .orange
-        case .sıcak: return .red
-        case .bilinmiyor: return .secondary
-        }
-    }
 
     // MARK: - İşlemci
 

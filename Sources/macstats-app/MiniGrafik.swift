@@ -24,6 +24,9 @@ import MacStatsCore
 struct MiniGrafik: View {
     let geçmiş: Geçmiş
 
+    // Sıcaklık çizgisi panelin geri kalanıyla aynı ısı skalasını kullanıyor.
+    @Environment(\.colorScheme) private var renkŞeması
+
     private let alanYüksekliği: CGFloat = 100
     private let etiketGenişliği: CGFloat = 34
 
@@ -189,16 +192,10 @@ struct MiniGrafik: View {
         xKonum: @escaping (Date) -> CGFloat,
         ySıcaklık: @escaping (Double) -> CGFloat
     ) -> some View {
-        // Çizginin rengi en son ölçüme göre; menü barındaki renkle aynı mantık.
+        // Çizginin rengi en son ölçüme göre; panelin ve menü barının
+        // kullandığı ısı skalasının aynısı (bkz. IsiRengiUyum.swift).
         let sonDeğer = noktalar[noktalar.count - 1].sıcaklık
-        let çizgiRengi: Color = {
-            switch sıcaklıkSeviyesi(sonDeğer) {
-            case .serin: return .primary
-            case .ılık: return .orange
-            case .sıcak: return .red
-            case .bilinmiyor: return .secondary
-            }
-        }()
+        let çizgiRengi = panelIsiRengi(sonDeğer, karanlık: renkŞeması == .dark)
 
         return Path { yol in
             for (sıra, nokta) in noktalar.enumerated() {
