@@ -55,8 +55,12 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
 
     private func düğmeyiKur() {
         guard let düğme = durumÖğesi.button else { return }
-        düğme.image = NSImage(systemSymbolName: "thermometer.medium",
-                              accessibilityDescription: "İşlemci sıcaklığı")
+        // Şablon simge: rengini contentTintColor belirliyor. Şablon olmasaydı
+        // simgenin kendi renkleri kullanılırdı ve boyayamazdık.
+        let simge = NSImage(systemSymbolName: "thermometer.medium",
+                            accessibilityDescription: "İşlemci sıcaklığı")
+        simge?.isTemplate = true
+        düğme.image = simge
         düğme.imagePosition = .imageLeading
     }
 
@@ -99,25 +103,35 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
         guard let düğme = durumÖğesi.button else { return }
 
         let derece = ölçüm?.sıcaklıklar?.işlemci
+
+        // Renk simgede, sayı nötr. Sayı da renkli olsaydı menü barında iki
+        // renkli öğe yan yana dururdu ve rakamların okunması zorlaşırdı;
+        // simge sinyali taşımaya yetiyor.
+        düğme.contentTintColor = simgeRengi(derece)
+
         düğme.attributedTitle = NSAttributedString(
             string: " " + kısaSıcaklık(derece),
             attributes: [
                 // Eşit genişlikte rakamlar. Bu satır olmadan sayı her
                 // değiştiğinde menü barı oynuyor.
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular),
-                .foregroundColor: renk(sıcaklıkSeviyesi(derece)),
+                .foregroundColor: NSColor.labelColor,
             ]
         )
     }
 
-    /// Sıcaklık seviyesine göre renk. Serin durumda özellikle nötr renk
-    /// kullanıyoruz ki menü barındaki diğer simgelerle uyumlu dursun ve
-    /// gereksiz yere dikkat çekmesin — asıl uyarı rengi işe yarasın.
-    private func renk(_ seviye: SıcaklıkSeviyesi) -> NSColor {
-        switch seviye {
-        case .serin, .bilinmiyor: return .labelColor
-        case .ılık: return .systemOrange
-        case .sıcak: return .systemRed
+    /// Termometre simgesinin rengi (bkz. IsiRengi.swift — kızılötesi ısı haritası).
+    ///
+    /// Menü barı, sistem açık temada olsa bile koyu olabiliyor (koyu duvar
+    /// kâğıdında). O yüzden rengi sabit vermiyoruz: NSColor'a iki ton veriyoruz
+    /// ve hangisinin kullanılacağına çizim anında menü barının kendi görünümü
+    /// karar veriyor.
+    private func simgeRengi(_ derece: Double?) -> NSColor? {
+        guard derece != nil else { return nil }   // nil = menü barının kendi rengi
+        return NSColor(name: nil) { görünüm in
+            let koyu = görünüm.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            guard let renk = ısıRengi(derece, koyuZemin: koyu) else { return .labelColor }
+            return NSColor(srgbRed: renk.kırmızı, green: renk.yeşil, blue: renk.mavi, alpha: 1)
         }
     }
 

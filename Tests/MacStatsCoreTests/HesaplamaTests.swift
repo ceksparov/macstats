@@ -215,3 +215,56 @@ final class GrafikÖlçeğiTests: XCTestCase {
         XCTAssertNil(grafikÖlçeği([]))
     }
 }
+
+
+final class IsıRengiTests: XCTestCase {
+
+    func testOkunamayanSıcaklıkRenkVermez() {
+        // Renk yoksa simge menü barının kendi rengini kullanmalı; uydurma
+        // bir renk göstermek "sıcaklık biliniyor" izlenimi verirdi.
+        XCTAssertNil(ısıRengi(nil, koyuZemin: false))
+    }
+
+    func testUçlaraSabitlenir() {
+        // Skala 30-85 °C. Dışına taşan değerler uç renklere sabitlenmeli,
+        // hesap dışına çıkıp saçma renk üretmemeli.
+        XCTAssertEqual(ısıRengi(5, koyuZemin: false), ısıRengi(30, koyuZemin: false))
+        XCTAssertEqual(ısıRengi(120, koyuZemin: false), ısıRengi(85, koyuZemin: false))
+    }
+
+    func testIsındıkçaKırmızıArtarMaviAzalır() {
+        // Skalanın yönü: lacivert-mordan kehribara. Kırmızı bileşen sürekli
+        // artmalı, mavi sürekli azalmalı. Bu bozulursa renk sıralaması
+        // anlamını yitirir.
+        let dereceler = [30.0, 40, 50, 60, 70, 80, 85]
+        let renkler = dereceler.compactMap { ısıRengi($0, koyuZemin: false) }
+        XCTAssertEqual(renkler.count, dereceler.count)
+
+        for i in 1 ..< renkler.count {
+            XCTAssertGreaterThan(renkler[i].kırmızı, renkler[i - 1].kırmızı,
+                                 "\(dereceler[i]) °C'de kırmızı artmamış")
+            XCTAssertLessThan(renkler[i].mavi, renkler[i - 1].mavi,
+                              "\(dereceler[i]) °C'de mavi azalmamış")
+        }
+    }
+
+    func testKoyuZeminTonlarıDahaAçık() {
+        // Koyu menü barında okunabilmesi için tonlar daha açık olmalı.
+        for derece in [30.0, 50, 70, 85] {
+            let açık = ısıRengi(derece, koyuZemin: false)!
+            let koyu = ısıRengi(derece, koyuZemin: true)!
+            let açıkParlaklık = açık.kırmızı + açık.yeşil + açık.mavi
+            let koyuParlaklık = koyu.kırmızı + koyu.yeşil + koyu.mavi
+            XCTAssertGreaterThan(koyuParlaklık, açıkParlaklık, "\(derece) °C")
+        }
+    }
+
+    func testAraDeğerlerGeçişli() {
+        // 40 °C, 30 ile 50 arasında olmalı — ani sıçrama değil, geçiş.
+        let a = ısıRengi(30, koyuZemin: false)!
+        let orta = ısıRengi(40, koyuZemin: false)!
+        let b = ısıRengi(50, koyuZemin: false)!
+        XCTAssertGreaterThan(orta.kırmızı, a.kırmızı)
+        XCTAssertLessThan(orta.kırmızı, b.kırmızı)
+    }
+}
