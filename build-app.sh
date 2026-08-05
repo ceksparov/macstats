@@ -18,15 +18,24 @@ PROGRAM="macstats-app"
 # numara söylemesiyle sonuçlanır — o yüzden buradan türetiyoruz.
 SURUM="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo '0.0.0')"
 
-echo "==> Sürüm ${SURUM} derleniyor"
-swift build -c release --product "${PROGRAM}"
+echo "==> Sürüm ${SURUM} derleniyor (universal: arm64 + x86_64)"
+# --arch iki kere verilince SwiftPM ikisini de derleyip tek bir "fat" ikili
+# olarak birleştiriyor (lipo). Bu şart: sadece arm64 derlersek Intel Mac'ler
+# uygulamayı hiç açamaz — Rosetta x86_64'ü arm64'e çevirir, tersini yapmaz.
+# Bizim Intel yedek yolumuz (SicaklikSMC.swift) universal olmayan bir
+# ikilikte hiç çalıştırılamayacak, ölü kod olarak kalırdı.
+swift build -c release --arch arm64 --arch x86_64 --product "${PROGRAM}"
 
 echo "==> ${PAKET} paketleniyor"
 rm -rf "${PAKET}"
 mkdir -p "${PAKET}/Contents/MacOS"
 mkdir -p "${PAKET}/Contents/Resources"
 
-cp ".build/release/${PROGRAM}" "${PAKET}/Contents/MacOS/${PROGRAM}"
+cp ".build/apple/Products/Release/${PROGRAM}" "${PAKET}/Contents/MacOS/${PROGRAM}"
+
+if [ -f "Resources/AppIcon.icns" ]; then
+  cp "Resources/AppIcon.icns" "${PAKET}/Contents/Resources/AppIcon.icns"
+fi
 
 cat > "${PAKET}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -37,6 +46,7 @@ cat > "${PAKET}/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key>       <string>macstats</string>
     <key>CFBundleIdentifier</key>        <string>com.github.ceksparov.macstats</string>
     <key>CFBundleExecutable</key>        <string>${PROGRAM}</string>
+    <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${SURUM}</string>
     <key>CFBundleVersion</key>           <string>${SURUM}</string>
@@ -50,3 +60,4 @@ PLIST
 
 echo "==> Hazır: $(pwd)/${PAKET}"
 echo "    Çalıştırmak için:  open ${PAKET}"
+echo "    Mimariler:         $(lipo -info "${PAKET}/Contents/MacOS/${PROGRAM}" 2>/dev/null | sed 's/.*: //')"

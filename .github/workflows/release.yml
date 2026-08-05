@@ -1,0 +1,53 @@
+# "vX.Y.Z" biçiminde bir etiket pushlanınca uygulamayı derleyip GitHub
+# Release olarak yayınlar. build-app.sh zaten sürüm numarasını git etiketinden
+# okuyor (bkz. o dosyadaki SURUM satırı), burada tekrar yazmıyoruz.
+#
+# macos-14: Apple Silicon (arm64) barındırıcı — GitHub'ın Intel (macos-13)
+# çalıştırıcılarını tamamen kaldırdığını daha önce öğrendik. Ama derleme yine
+# de hem arm64 hem x86_64 üretiyor (build-app.sh'taki --arch iki kere), çünkü
+# Xcode'un içindeki x86_64 SDK'sı çapraz derleme için yeterli — çalıştırmak
+# için gerçek Intel donanımı gerekmiyor, sadece derlemek için.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # build-app.sh "git describe --tags" ile sürümü buluyor; sığ bir
+          # checkout'ta (varsayılan) etiket geçmişi eksik kalabiliyor.
+          fetch-depth: 0
+
+      - name: Uygulamayı derle
+        run: ./build-app.sh
+
+      - name: Sağlığını doğrula (universal mi, gerçekten çalıştırılabiliyor mu)
+        run: |
+          lipo -info macstats.app/Contents/MacOS/macstats-app
+          codesign -dv macstats.app 2>&1 || true
+
+      - name: .app'i zip'le
+        run: |
+          # ditto: macOS uygulama paketlerini (kaynak çatalları, genişletilmiş
+          # öznitelikler dahil) doğru zip'leyen resmî araç — düz "zip" bazen
+          # bunları bozuyor.
+          ditto -c -k --sequesterRsrc --keepParent macstats.app macstats.zip
+
+      - name: Release oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" macstats.zip \
+            --title "macstats ${{ github.ref_name }}" \
+            --generate-notes
