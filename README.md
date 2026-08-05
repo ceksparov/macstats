@@ -5,7 +5,7 @@ son 60 saniyenin grafiği, işlemci kullanımı, bellek ve pil bilgisi açılıy
 
 Apple ile ilgisi yoktur, Apple tarafından desteklenmez.
 
-![macstats — menü barı ve panel](docs/ekran-goruntusu.png)
+![macstats — simgeye tıklayınca açılan pencere](docs/ekran-goruntusu.png)
 
 ## Gereksinimler
 
