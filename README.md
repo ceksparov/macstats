@@ -5,6 +5,8 @@ son 60 saniyenin grafiği, işlemci kullanımı, bellek ve pil bilgisi açılıy
 
 Apple ile ilgisi yoktur, Apple tarafından desteklenmez.
 
+![macstats — menü barı ve panel](docs/ekran-goruntusu.png)
+
 ## Gereksinimler
 
 - macOS 13 veya üstü
@@ -84,3 +86,12 @@ Kodda anlaşılmayabilecek yerlerin çoğu yorumlarla açıklandı. Öne çıkan
   demek.
 - **Ölçüm ana iş parçacığında yapılmıyor** ve yalnızca ekranda gösterilen
   sensörler okunuyor — bir ölçüm 55 ms'ten 3.3 ms'e indi.
+
+## Teşekkür
+
+Intel SMC anahtarları [jkuri/macstats](https://github.com/jkuri/macstats)
+ile çapraz doğrulandı — 2015'ten beri geliştirilen, bağımsız bir proje.
+
+## Lisans
+
+[MIT](LICENSE)
