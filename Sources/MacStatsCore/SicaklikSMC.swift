@@ -16,11 +16,17 @@ import IOKit
 // Yapı boyutu doğrulandı: SMCVeri tam 80 bayt olmalı (aşağıdaki dolgu alanına
 // bakınız). Bu tutmazsa çekirdek çağrıyı reddediyor.
 //
-// !!! BU KOD GERÇEK DONANIMDA TEST EDİLEMEDİ !!!
-// Elimizde Intel bir Mac yok. Mantık bilinen SMC protokolüne göre yazıldı ama
-// gerçek donanımda doğrulanmadı. Bu yüzden kesinlikle YEDEK yol olarak duruyor:
-// Apple Silicon'da hiç çalıştırılmıyor, dolayısıyla çalışan tarafı bozamaz.
-// Bir Intel Mac'te denenene kadar "muhtemelen çalışır" muamelesi görmeli.
+// Sıcaklık anahtarları (TC0P, TC0D, TG0D) github.com/jkuri/macstats ile
+// çapraz doğrulandı — 2015'ten beri gerçek Intel Mac'lerde çalışan, bağımsız
+// bir projede birebir aynı anahtarlar kullanılıyor.
+//
+// !!! AMA BU KOD HÂLÂ GERÇEK INTEL DONANIMINDA ÇALIŞTIRILMADI !!!
+// Anahtarların doğruluğu bir referansla teyit edildi, ama SMC çağrı
+// protokolünün (yapı boyutu, komut numaraları, veri çözme) bu makinede
+// gerçekten çalıştığı hiç görülmedi — elimizde Intel Mac yok. Bu yüzden
+// kesinlikle YEDEK yol olarak duruyor: Apple Silicon'da hiç çalıştırılmıyor,
+// dolayısıyla çalışan tarafı bozamaz. Bir Intel Mac'te denenene kadar
+// "anahtarlar doğru, protokol muhtemelen çalışır" muamelesi görmeli.
 // ============================================================================
 
 
@@ -97,22 +103,24 @@ private let türFLT  = anahtarNumarası("flt ")
 final class SMCOkuyucu {
 
     /// Intel Mac'lerde bilinen sıcaklık anahtarları, gruplarıyla.
-    /// Modelden modele hangi anahtarın var olduğu değişiyor; bu yüzden her
-    /// grup için birkaç aday deniyoruz ve ilk cevap vereni kullanıyoruz.
+    ///
+    /// Bu üç anahtar (TC0P, TC0D, TG0D) jkuri/macstats projesiyle çapraz
+    /// doğrulandı — 2015'ten beri gerçek Intel Mac'lerde çalışan, 70+ yıldız
+    /// almış bağımsız bir projenin kodunda birebir aynı anahtarlar kullanılıyor.
+    /// (github.com/jkuri/macstats, smc/smc.cc — SMCGetTemperature() ve
+    /// CpuTemperatureDie()/GpuTemperature() fonksiyonları.)
+    ///
+    /// Önceki sürümde burada 10 anahtar daha vardı (TC0E, TC0F, TCXC, TG0P,
+    /// TB0T/TB1T/TB2T, TH0P, Ts0P, TA0P) — hepsi benim tahminimdi, hiçbiri
+    /// hiçbir kaynakta doğrulanamadı. Kaldırıldılar: doğrulanmamış bir anahtarı
+    /// listede tutmak "belki tutar" diye umut etmekten ibaretti, ki bu
+    /// projenin "yanlış sayı göstermektense hiç gösterme" ilkesine aykırı.
+    /// Pil sıcaklığı artık SMC tahminine değil, aşağıdaki
+    /// pilSıcaklığınıOku()'daki IORegistry okumasına dayanıyor.
     private static let anahtarlar: [(anahtar: String, grup: SensörGrubu, ad: String)] = [
-        ("TC0D", .işlemciÇekirdeği, "CPU die"),
         ("TC0P", .işlemciÇekirdeği, "CPU proximity"),
-        ("TC0E", .işlemciÇekirdeği, "CPU 0E"),
-        ("TC0F", .işlemciÇekirdeği, "CPU 0F"),
-        ("TCXC", .işlemciÇekirdeği, "CPU PECI"),
+        ("TC0D", .işlemciÇekirdeği, "CPU die"),
         ("TG0D", .grafik, "GPU die"),
-        ("TG0P", .grafik, "GPU proximity"),
-        ("TB0T", .pil, "Battery 0"),
-        ("TB1T", .pil, "Battery 1"),
-        ("TB2T", .pil, "Battery 2"),
-        ("TH0P", .depolama, "Disk proximity"),
-        ("Ts0P", .çipGövdesi, "Palm rest"),
-        ("TA0P", .çipGövdesi, "Ambient"),
     ]
 
     private var bağlantı: io_connect_t = 0
@@ -135,6 +143,9 @@ final class SMCOkuyucu {
             guard (-10.0 ... 130.0).contains(derece) else { continue }
             okumalar.append(SensörOkuması(isim: aday.ad, derece: derece))
         }
+        if let pil = pilSıcaklığınıOku() {
+            okumalar.append(SensörOkuması(isim: "Battery (IORegistry)", derece: pil))
+        }
         return okumalar
     }
 
@@ -148,7 +159,34 @@ final class SMCOkuyucu {
                   (-10.0 ... 130.0).contains(derece) else { continue }
             sonuç[aday.grup] = max(sonuç[aday.grup] ?? -Double.infinity, derece)
         }
+        if let pil = pilSıcaklığınıOku() {
+            sonuç[.pil] = pil
+        }
         return sonuç
+    }
+
+    /// Pil sıcaklığını SMC'den TAHMİN ETMEK yerine IORegistry'den okur.
+    /// AppleSmartBattery servisi Intel ve Apple Silicon'da aynı şekilde
+    /// çalışıyor — bu M1 Air'de "ioreg -c AppleSmartBattery" ile ölçülüp
+    /// IOHID sensörlerine karşı çapraz doğrulandı (30.2 °C / 28-29 °C,
+    /// aynı aralık). "Temperature" anahtarı santi-Celsius cinsinden (örn.
+    /// 3023 = 30.23 °C).
+    private func pilSıcaklığınıOku() -> Double? {
+        let servis = IOServiceGetMatchingService(
+            kIOMainPortDefault, IOServiceMatching("AppleSmartBattery")
+        )
+        guard servis != 0 else { return nil }
+        defer { IOObjectRelease(servis) }
+
+        var özelliklerRef: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(servis, &özelliklerRef, kCFAllocatorDefault, 0)
+                == KERN_SUCCESS,
+              let özellikler = özelliklerRef?.takeRetainedValue() as? [String: Any],
+              let santiCelsius = özellikler["Temperature"] as? Int
+        else { return nil }
+
+        let derece = Double(santiCelsius) / 100
+        return (-10.0 ... 130.0).contains(derece) ? derece : nil
     }
 
     private func bağlan() -> Bool {

@@ -54,9 +54,12 @@ ayrı tutuluyor: bozulursa uygulama çökmez, sıcaklık yerine "—" gösterip
 - **Sadece MacBook Air (M1, 2020) üzerinde denendi.** Sensör isimleri çipten
   çipe değişiyor. Başka bir modelde sıcaklık "—" görünürse `sensor-probe`
   çıktısı sorunu göstermeye yeter.
-- **Intel desteği test edilmedi.** `SicaklikSMC.swift` yalnızca IOHID hiçbir
-  şey döndürmediğinde devreye giriyor; mantığı yazıldı ama gerçek bir Intel
-  Mac'te hiç çalıştırılmadı.
+- **Intel desteği hâlâ gerçek donanımda çalıştırılmadı.** `SicaklikSMC.swift`
+  yalnızca IOHID hiçbir şey döndürmediğinde devreye giriyor. Kullandığı üç
+  SMC anahtarı ([jkuri/macstats](https://github.com/jkuri/macstats) ile
+  çapraz doğrulandı — 2015'ten beri gerçek Intel Mac'lerde çalışan bağımsız
+  bir projede birebir aynılar), ama SMC çağrı protokolünün kendisi bir Intel
+  Mac'te hiç denenmedi.
 - **Uygulama imzasız.** Kendi makinende sorunsuz açılır. Başka birine
   verirsen macOS "geliştirici doğrulanamadı" diyecek; Sistem Ayarları →
   Gizlilik ve Güvenlik → "Yine de Aç" gerekir.
