@@ -35,7 +35,7 @@ cat > "${PAKET}/Contents/Info.plist" <<PLIST
 <dict>
     <key>CFBundleName</key>              <string>macstats</string>
     <key>CFBundleDisplayName</key>       <string>macstats</string>
-    <key>CFBundleIdentifier</key>        <string>local.macstats</string>
+    <key>CFBundleIdentifier</key>        <string>com.github.ceksparov.macstats</string>
     <key>CFBundleExecutable</key>        <string>${PROGRAM}</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${SURUM}</string>
