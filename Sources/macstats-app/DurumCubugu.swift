@@ -137,14 +137,9 @@ final class DurumÇubuğu: NSObject, NSMenuDelegate {
         )
     }
 
-    /// Termometre simgesinin rengi (bkz. IsiRengi.swift — kızılötesi ısı haritası).
-    /// Menü barının açık/koyu olduğuna göre iki tondan biri seçiliyor;
-    /// bunu durum öğesinin kendi görünümünden okuyoruz.
+    /// Termometre simgesinin rengi (bkz. IsiRengi.swift — 6 kademeli skala).
     private func simgeRengi(_ derece: Double?) -> NSColor? {
-        guard derece != nil else { return nil }
-        let koyu = durumÖğesi.button?.effectiveAppearance
-            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        guard let renk = ısıRengi(derece, koyuZemin: koyu) else { return nil }
+        guard let renk = ısıRengi(derece) else { return nil }
         return NSColor(srgbRed: renk.kırmızı, green: renk.yeşil, blue: renk.mavi, alpha: 1)
     }
 

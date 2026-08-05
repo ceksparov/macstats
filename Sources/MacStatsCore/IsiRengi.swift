@@ -3,25 +3,19 @@ import Foundation
 // ============================================================================
 // SICAKLIK → RENK
 //
-// Menü barındaki termometre simgesinin rengi buradan çıkıyor.
+// Menü bar simgesinin ve panelin (büyük sayı + grafik çizgisi) rengi buradan
+// çıkıyor — ikisi de aynı fonksiyonu çağırıyor ki uygulama tek bir renk dili
+// konuşsun.
 //
-// Neden trafik ışığı (yeşil/turuncu/kırmızı) değil:
-//   - Yeşil "her şey yolunda", kırmızı "sorun var" demek. Ama bir işlemcinin
-//     ısınması sorun değil, işini yapması demek. Yanlış duygu veriyordu.
-//   - Menü barında zaten pil, wifi gibi şeyler o renkleri kullanıyor.
-//
-// Onun yerine kızılötesi kameraların ısı haritası: soğukta lacivert-mor,
-// ısındıkça mor, fuşya, en sıcakta kehribar. Bu skalanın iki iyi yanı var:
-//   - Sıcaklık arttıkça renk sadece değişmiyor, AÇILIYOR da. Yani renkleri
-//     ayırt edemeyen biri bile parlaklıktan durumu okuyabiliyor.
-//   - Sıcaklık için zaten tanıdık bir dil.
-//
-// Renkler ara değerlerle geçişli: 42 °C ile 43 °C arasında ani sıçrama yok.
-// Menü barının açık ya da koyu olmasına göre iki ayrı ton var; tek bir renk
-// ikisinde birden okunaklı olmuyor.
+// 6 kademeli, ayrık (sürekli geçişli değil) bir skala. Eşikler ve renkler bir
+// M1 MacBook Air kullanıcısının kendi deneyimine göre belirlediği değerler:
+// < 35 çok soğuk, 35-45 soğuk, 45-60 normal, 60-75 orta, 75-85 sıcak, 85+ çok
+// sıcak. Önceki sürümde (kızılötesi ısı haritası, 30-85 arası sürekli
+// geçişli) yeşil/turuncu/kırmızı kasıtlı olarak kullanılmamıştı; burada
+// tam tersi — bu tablo bilerek geleneksel trafik ışığı mantığını kullanıyor.
 // ============================================================================
 
-/// Basit renk taşıyıcı. AppKit'e bağlı olmasın diye kendi tipimiz —
+/// Basit renk taşıyıcı. AppKit/SwiftUI'a bağlı olmasın diye kendi tipimiz —
 /// böylece bu dosya test edilebiliyor.
 public struct RGB: Sendable, Equatable {
     public let kırmızı: Double
@@ -44,57 +38,32 @@ public struct RGB: Sendable, Equatable {
     }
 }
 
-private struct RenkDurağı {
-    let derece: Double
-    let açıkZemin: RGB   // açık menü barında kullanılacak ton
-    let koyuZemin: RGB   // koyu menü barında kullanılacak ton
+private struct SıcaklıkKademesi {
+    /// Bu kademenin üst sınırı (bu değere kadar, dahil değil). En üst
+    /// kademede nil — üstte sınır yok.
+    let üstSınır: Double?
+    let renk: RGB
 }
 
-// Duraklar arasında hem kırmızı sürekli artıyor hem mavi sürekli azalıyor —
-// yani renk sıralaması tek yönlü. Bu testle korunuyor; bozulursa skala
-// "daha sıcak" hissini vermeyi bırakır.
-//
-// Aralık 30–85 °C. Alt uç bu makinenin boştaki sıcaklığı, üst uç ise
-// gerçekten dikkat edilmesi gereken yer. Dışına taşanlar uçlara sabitleniyor.
-private let ısıSkalası: [RenkDurağı] = [
-    RenkDurağı(derece: 30,
-               açıkZemin: RGB(onaltılık: 0x4A4AD8),   // lacivert-mor
-               koyuZemin: RGB(onaltılık: 0x9A9AF5)),
-    RenkDurağı(derece: 50,
-               açıkZemin: RGB(onaltılık: 0x8A3FC8),   // mor
-               koyuZemin: RGB(onaltılık: 0xB98BEE)),
-    RenkDurağı(derece: 70,
-               açıkZemin: RGB(onaltılık: 0xC63A8C),   // fuşya
-               koyuZemin: RGB(onaltılık: 0xF07CC0)),
-    RenkDurağı(derece: 85,
-               açıkZemin: RGB(onaltılık: 0xD1701A),   // kehribar
-               koyuZemin: RGB(onaltılık: 0xF7A845)),
+// Kademe sırası önemli: ısıRengi() ilk uyanı (derece < üstSınır olanı)
+// döndürüyor, bu yüzden küçükten büyüğe sıralı olmalı.
+private let ısıSkalası: [SıcaklıkKademesi] = [
+    SıcaklıkKademesi(üstSınır: 35, renk: RGB(onaltılık: 0x2563EB)),   // 🧊 Çok soğuk
+    SıcaklıkKademesi(üstSınır: 45, renk: RGB(onaltılık: 0x06B6D4)),   // ❄️ Soğuk
+    SıcaklıkKademesi(üstSınır: 60, renk: RGB(onaltılık: 0x22C55E)),   // 🟢 Normal
+    SıcaklıkKademesi(üstSınır: 75, renk: RGB(onaltılık: 0xEAB308)),   // 🟡 Orta
+    SıcaklıkKademesi(üstSınır: 85, renk: RGB(onaltılık: 0xF97316)),   // 🟠 Sıcak
+    SıcaklıkKademesi(üstSınır: nil, renk: RGB(onaltılık: 0xEF4444)),  // 🔴 Çok sıcak
 ]
 
-/// Sıcaklığı simge rengine çevirir.
-/// Okunamayan sıcaklık için nil döner — o durumda simge menü barının kendi
-/// rengini kullanmalı, uydurma bir renk değil.
-public func ısıRengi(_ derece: Double?, koyuZemin: Bool) -> RGB? {
+/// Sıcaklığı simge/panel rengine çevirir.
+/// Okunamayan sıcaklık için nil döner — o durumda renk yerine sistemin kendi
+/// nötr rengi kullanılmalı, uydurma bir renk değil.
+public func ısıRengi(_ derece: Double?) -> RGB? {
     guard let derece else { return nil }
-
-    let ilk = ısıSkalası[0]
-    let son = ısıSkalası[ısıSkalası.count - 1]
-    if derece <= ilk.derece { return koyuZemin ? ilk.koyuZemin : ilk.açıkZemin }
-    if derece >= son.derece { return koyuZemin ? son.koyuZemin : son.açıkZemin }
-
-    for i in 0 ..< (ısıSkalası.count - 1) {
-        let alt = ısıSkalası[i]
-        let üst = ısıSkalası[i + 1]
-        guard derece >= alt.derece, derece <= üst.derece else { continue }
-
-        let oran = (derece - alt.derece) / (üst.derece - alt.derece)
-        let a = koyuZemin ? alt.koyuZemin : alt.açıkZemin
-        let b = koyuZemin ? üst.koyuZemin : üst.açıkZemin
-        return RGB(
-            a.kırmızı + (b.kırmızı - a.kırmızı) * oran,
-            a.yeşil + (b.yeşil - a.yeşil) * oran,
-            a.mavi + (b.mavi - a.mavi) * oran
-        )
+    for kademe in ısıSkalası {
+        guard let üst = kademe.üstSınır else { return kademe.renk }  // son kademe
+        if derece < üst { return kademe.renk }
     }
-    return nil
+    return ısıSkalası.last?.renk  // pratikte hiç buraya düşmez
 }

@@ -81,9 +81,10 @@ Kodda anlaşılmayabilecek yerlerin çoğu yorumlarla açıklandı. Öne çıkan
 - **Bellek baskısı göstergesi kaldırıldı.** Okuduğumuz sysctl bu makinede
   sürekli "uyarı" derken macOS'un kendi aracı belleğin %42'sinin boş olduğunu
   söylüyordu; doğrulayamadığımız bir sayıyı uyarı diye göstermedik.
-- **Menü bar simgesinin rengi** kızılötesi ısı haritası (mor → fuşya →
-  kehribar), trafik ışığı değil: ısınan bir işlemci arıza değil, çalışıyor
-  demek.
+- **Menü bar simgesi ve panel aynı 6 kademeli renk skalasını kullanıyor**
+  (`IsiRengi.swift`): <35 °C çok soğuk, 35-45 soğuk, 45-60 normal, 60-75
+  orta, 75-85 sıcak, 85+ çok sıcak. Ayrık kademeler, sürekli geçiş yok —
+  ikisi ayrı yerde tanımlı olsaydı zamanla birbirinden sapabilirdi.
 - **Ölçüm ana iş parçacığında yapılmıyor** ve yalnızca ekranda gösterilen
   sensörler okunuyor — bir ölçüm 55 ms'ten 3.3 ms'e indi.
 
