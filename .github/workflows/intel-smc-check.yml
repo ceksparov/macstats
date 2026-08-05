@@ -24,7 +24,10 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  intel-donanımda-oku:
+  # Not: iş kimliği (soldaki anahtar) GitHub'da yalnızca ASCII harf/rakam/-/_
+  # kabul ediyor, Türkçe karakter alınmıyor; görünen ad "name" alanında.
+  intel-donanimda-oku:
+    name: Intel donanımda oku
     # macos-13: GitHub'ın son Intel (x86_64) macOS çalıştırıcısı. macos-14 ve
     # sonrası Apple Silicon'a geçti; SMC testi için özellikle bunu istiyoruz.
     runs-on: macos-13
